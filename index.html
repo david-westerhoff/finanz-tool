@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Finanz-Tool</title>
+<meta name="description" content="Monte-Carlo-Simulation für Sparpläne und nominaler Entnahmeplan – läuft komplett im Browser.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f1117'/%3E%3Cpath d='M5 25 L12 17 L17 21 L27 8' stroke='%2338d996' stroke-width='3.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #0e1117;
+    --panel: #161a23;
+    --panel-2: #1d2230;
+    --border: #2a3040;
+    --text: #fafafa;
+    --muted: #9aa3b5;
+    --accent: #ff4b4b;
+    --blue: #3fa7ff;
+    --green: #38d996;
+    --red: #ff5d73;
+    --orange: #ff7f24;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 32px 16px 48px; }
+  h1 { font-size: 2.4rem; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  h2 { font-size: 1.6rem; margin: 28px 0 14px; }
+  h3 { font-size: 1.1rem; margin: 22px 0 10px; }
+
+  .tabs { display: inline-flex; background: var(--panel); border: 1px solid var(--border); border-radius: 999px; padding: 4px; gap: 4px; }
+  .tab {
+    font: inherit; color: var(--muted); background: none; border: 0; border-radius: 999px;
+    padding: 8px 18px; cursor: pointer; transition: background .2s, color .2s;
+  }
+  .tab[aria-selected="true"] { background: var(--panel-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--border); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px 18px; }
+  label { display: block; font-size: 0.9rem; color: var(--muted); margin-bottom: 6px; }
+  input[type=number] {
+    width: 100%; font: inherit; color: var(--text); background: var(--panel);
+    border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px;
+  }
+  input[type=number]:focus { outline: none; border-color: var(--accent); }
+  .hint { font-size: 0.78rem; color: var(--muted); margin-top: 4px; }
+
+  .btn {
+    font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 18px; cursor: pointer; margin-top: 18px;
+    transition: border-color .2s, color .2s;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn:disabled { opacity: .5; cursor: wait; }
+
+  .progress { height: 6px; background: var(--panel); border-radius: 99px; overflow: hidden; margin-top: 14px; display: none; }
+  .progress > div { height: 100%; width: 0; background: linear-gradient(90deg, var(--blue), var(--green)); transition: width .15s; }
+  .status { color: var(--muted); font-size: 0.85rem; margin-top: 6px; min-height: 1.3em; }
+
+  .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 18px; }
+  @media (max-width: 820px) { .charts { grid-template-columns: 1fr; } }
+  .chart { background: #0f1117; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; }
+  .chart canvas { width: 100%; height: 360px; display: block; }
+  .chart.wide canvas { height: 380px; }
+
+  .metrics { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+  .metric { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .metric .k { font-size: 0.8rem; color: var(--muted); }
+  .metric .v { font-size: 1.25rem; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 2px; }
+
+  .table-wrap { max-height: 420px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 0.92rem; }
+  th, td { padding: 8px 12px; text-align: right; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th { position: sticky; top: 0; background: var(--panel-2); color: var(--muted); font-weight: 600; }
+  th:first-child, td:first-child { text-align: left; }
+  tbody tr:hover { background: var(--panel); }
+
+  .hidden { display: none; }
+  footer { color: var(--muted); font-size: 0.8rem; margin-top: 40px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Finanz-Tool</h1>
+  <p class="sub">Was möchtest du berechnen?</p>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" aria-selected="true" data-view="mc">Monte-Carlo Simulation</button>
+    <button class="tab" role="tab" aria-selected="false" data-view="ent">Entnahmeplan</button>
+  </div>
+
+  <!-- ================= MONTE CARLO ================= -->
+  <section id="view-mc">
+    <h2>Monte-Carlo Simulation</h2>
+    <div class="grid">
+      <div><label for="mc-init">Anfangsinvestition (€)</label><input id="mc-init" type="number" value="10000" step="1000" min="0"></div>
+      <div><label for="mc-cagr">Erwartete Rendite (CAGR)</label><input id="mc-cagr" type="number" value="0.08" step="0.005"><div class="hint">0,08 = 8 % pro Jahr</div></div>
+      <div><label for="mc-vol">Volatilität p.a.</label><input id="mc-vol" type="number" value="0.15" step="0.01" min="0"><div class="hint">0,15 = 15 % Schwankung pro Jahr</div></div>
+      <div><label for="mc-years">Anlagehorizont (Jahre)</label><input id="mc-years" type="number" value="25" step="1" min="1" max="80"></div>
+      <div><label for="mc-rate">Monatliche Sparrate (€)</label><input id="mc-rate" type="number" value="300" step="50" min="0"></div>
+      <div><label for="mc-n">Anzahl der Simulationen</label><input id="mc-n" type="number" value="15000" step="1000" min="100" max="100000"></div>
+      <div><label for="mc-steps">Zeitschritte pro Jahr</label><input id="mc-steps" type="number" value="252" step="1" min="1" max="365"><div class="hint">252 = Handelstage, 12 = monatlich (viel schneller)</div></div>
+      <div><label for="mc-seed">Seed (0 = Zufall)</label><input id="mc-seed" type="number" value="0" step="1" min="0"><div class="hint">gleicher Seed → gleiches Ergebnis</div></div>
+    </div>
+    <button class="btn" id="mc-run">Simulation starten</button>
+    <div class="progress" id="mc-progress"><div></div></div>
+    <div class="status" id="mc-status"></div>
+
+    <div id="mc-results" class="hidden">
+      <div class="charts">
+        <div class="chart"><canvas id="c-paths" aria-label="Wertentwicklung, logarithmisch"></canvas></div>
+        <div class="chart"><canvas id="c-hist" aria-label="Verteilung der Endwerte"></canvas></div>
+      </div>
+      <h3>Kennzahlen</h3>
+      <div class="metrics" id="mc-metrics"></div>
+      <h3>Wahrscheinlichkeiten</h3>
+      <div class="metrics" id="mc-probs"></div>
+    </div>
+  </section>
+
+  <!-- ================= ENTNAHMEPLAN ================= -->
+  <section id="view-ent" class="hidden">
+    <h2>Entnahmeplan (nur nominal)</h2>
+    <div class="grid">
+      <div><label for="e-start">Startkapital (€)</label><input id="e-start" type="number" value="300000" step="10000" min="0"></div>
+      <div><label for="e-ziel">Zielendwert (€)</label><input id="e-ziel" type="number" value="0" step="10000" min="0"></div>
+      <div><label for="e-cagr">Erwartete Rendite (CAGR)</label><input id="e-cagr" type="number" value="0.035" step="0.005"></div>
+      <div><label for="e-infl">Jährliche Inflation</label><input id="e-infl" type="number" value="0.02" step="0.005"></div>
+      <div><label for="e-years">Entnahmezeitraum (Jahre)</label><input id="e-years" type="number" value="30" step="1" min="1" max="100"></div>
+    </div>
+    <button class="btn" id="e-run">Entnahme berechnen</button>
+    <div class="status" id="e-status"></div>
+
+    <div id="e-results" class="hidden">
+      <div class="metrics" id="e-metrics" style="margin-top:18px"></div>
+      <div class="chart wide" style="margin-top:14px"><canvas id="c-ent" aria-label="Nominaler Kapitalverlauf"></canvas></div>
+      <h3>Tabelle</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Jahr</th><th>Entnahme nominal (Jahr)</th><th>Entnahme nominal (Monat)</th><th>Kapital am Jahresende</th></tr></thead>
+          <tbody id="e-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Alle Berechnungen laufen in deinem Browser; es werden keine Eingaben übertragen oder gespeichert.
+    Das Modell nimmt lognormal verteilte Renditen an und berücksichtigt keine Kosten und Steuern.
+    Keine Anlageberatung.
+  </footer>
+</div>
+
+<!-- Rechenkern der Simulation, läuft in einem Web Worker, damit die Seite nicht einfriert -->
+<script id="mc-worker" type="text/js-worker">
+  "use strict";
+  // kleiner, schneller Zufallsgenerator mit Seed (mulberry32)
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      let t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  onmessage = e => {
+    const { init, cagr, vol, years, rate, n, steps, seed } = e.data;
+    const rnd = mulberry32(seed > 0 ? seed : (Math.random() * 2 ** 32) >>> 0);
+
+    const totalSteps = years * steps;
+    const dt = 1 / steps;
+    const drift = Math.log(1 + cagr) * dt;     // wie im Python-Original
+    const diffusion = vol * Math.sqrt(dt);
+    const contrib = rate * 12 / steps;
+
+    // Für die Grafik nur ~300 Zeitpunkte speichern, nicht jeden Schritt
+    const stride = Math.max(1, Math.round(totalSteps / 300));
+    const recSteps = [];
+    for (let t = 0; t <= totalSteps; t += stride) recSteps.push(t);
+    if (recSteps[recSteps.length - 1] !== totalSteps) recSteps.push(totalSteps);
+    const R = recSteps.length;
+    const rec = new Float32Array(R * n);       // rec[k * n + i]
+    const finals = new Float64Array(n);
+
+    const nSample = Math.min(e.data.nSample, n);
+    const sample = new Set();
+    while (sample.size < nSample) sample.add(Math.floor(rnd() * n));
+    const samplePaths = [];
+
+    // Zufallszahlen blockweise erzeugen: schneller als einzeln pro Schritt
+    const z = new Float64Array(totalSteps + 1);
+    function fillNormals() {
+      for (let t = 0; t < totalSteps; t += 2) {
+        let u = rnd(); if (u === 0) u = 1e-12;
+        const r = Math.sqrt(-2 * Math.log(u)), th = 6.283185307179586 * rnd();
+        z[t] = r * Math.cos(th); z[t + 1] = r * Math.sin(th);
+      }
+    }
+    const recAt = new Int32Array(totalSteps + 1).fill(-1);
+    recSteps.forEach((t, k) => { recAt[t] = k; });
+
+    const progEvery = Math.max(1, Math.floor(n / 50));
+    for (let i = 0; i < n; i++) {
+      fillNormals();
+      let v = init;
+      rec[i] = v;
+      for (let t = 1; t <= totalSteps; t++) {
+        v = v * Math.exp(drift + diffusion * z[t - 1]) + contrib;
+        const k = recAt[t];
+        if (k > 0) rec[k * n + i] = v;
+      }
+      finals[i] = v;
+      if (sample.has(i)) {
+        const p = new Float32Array(R);
+        for (let j = 0; j < R; j++) p[j] = rec[j * n + i];
+        samplePaths.push(p);
+      }
+      if (i % progEvery === 0) postMessage({ type: "progress", done: i });
+    }
+
+    postMessage({ type: "done", n, R, recSteps, rec, finals, samplePaths },
+      [rec.buffer, finals.buffer, ...samplePaths.map(p => p.buffer)]);
+  };
+</script>
+
+<script>
+(() => {
+  "use strict";
+
+  // ---------- Formatierung ----------
+  const de2 = new Intl.NumberFormat("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const de0 = new Intl.NumberFormat("de-DE", { maximumFractionDigits: 0 });
+  const de1 = new Intl.NumberFormat("de-DE", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const fmt = x => de2.format(x);
+  function euro(x) {                           // wie euro_formatter im Original
+    const a = Math.abs(x);
+    if (a >= 1e6) return de1.format(x / 1e6) + " Mio. €";
+    if (a >= 1e3) return de0.format(x / 1e3) + " Tsd. €";
+    return de0.format(x) + " €";
+  }
+  const $ = id => document.getElementById(id);
+  const num = id => parseFloat($(id).value.replace(",", "."));
+
+  // ---------- Umschalter ----------
+  document.querySelectorAll(".tab").forEach(b => b.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(x => x.setAttribute("aria-selected", x === b));
+    $("view-mc").classList.toggle("hidden", b.dataset.view !== "mc");
+    $("view-ent").classList.toggle("hidden", b.dataset.view !== "ent");
+    redrawAll();
+  }));
+
+  // ---------- Farbverläufe wie im Original ----------
+  const GRAD_LEFT = [[0, "#38d996"], [0.2, "#d4f442"], [0.4, "#f4e842"], [0.6, "#ffb347"], [0.8, "#ff7f24"], [1, "#ff3b30"]];
+  const GRAD_RIGHT = GRAD_LEFT.map(([p, c]) => [1 - p, c]).reverse();
+  const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  function cmap(stops, t) {
+    t = Math.min(1, Math.max(0, t));
+    for (let i = 1; i < stops.length; i++) {
+      if (t <= stops[i][0]) {
+        const [p0, c0] = stops[i - 1], [p1, c1] = stops[i];
+        const f = (t - p0) / (p1 - p0), a = hex(c0), b = hex(c1);
+        return `rgb(${a.map((v, k) => Math.round(v + (b[k] - v) * f)).join(",")})`;
+      }
+    }
+    return stops[stops.length - 1][1];
+  }
+
+  // ---------- Zeichenhilfe ----------
+  function setupCanvas(cv) {
+    const dpr = window.devicePixelRatio || 1;
+    const w = cv.clientWidth, h = cv.clientHeight;
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    const ctx = cv.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    ctx.font = "12px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
+    return { ctx, w, h };
+  }
+  function niceTicks(min, max, count = 5) {
+    const span = max - min || 1;
+    const step0 = span / count, mag = 10 ** Math.floor(Math.log10(step0));
+    const err = step0 / mag;
+    const step = (err >= 7.5 ? 10 : err >= 3.5 ? 5 : err >= 1.5 ? 2 : 1) * mag;
+    const ticks = [];
+    for (let v = Math.ceil(min / step) * step; v <= max + step * 1e-9; v += step) ticks.push(v);
+    return ticks;
+  }
+  function logTicks(min, max) {
+    const t = [];
+    for (let e = Math.floor(Math.log10(min)); e <= Math.ceil(Math.log10(max)); e++)
+      for (const m of [1, 2, 5]) { const v = m * 10 ** e; if (v >= min && v <= max) t.push(v); }
+    return t;
+  }
+  function frame(ctx, box, title) {
+    ctx.fillStyle = "#fafafa"; ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
+    ctx.font = "600 14px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
+    ctx.fillText(title, box.x + box.w / 2, 20);
+    ctx.font = "12px system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
+    ctx.strokeStyle = "#3a4152"; ctx.lineWidth = 1; ctx.setLineDash([]);
+    ctx.strokeRect(box.x + 0.5, box.y + 0.5, box.w, box.h);
+  }
+  function gridLine(ctx, x1, y1, x2, y2) {
+    ctx.save(); ctx.strokeStyle = "rgba(255,255,255,0.13)"; ctx.setLineDash([4, 4]); ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); ctx.restore();
+  }
+  function legend(ctx, x, y, items, alignRight) {
+    ctx.save(); ctx.textBaseline = "middle"; ctx.font = "12px system-ui, sans-serif";
+    const widths = items.map(it => ctx.measureText(it.label).width + 30);
+    const wMax = Math.max(...widths);
+    const x0 = alignRight ? x - wMax : x;
+    items.forEach((it, i) => {
+      const yy = y + i * 18;
+      ctx.strokeStyle = it.color; ctx.fillStyle = it.color; ctx.lineWidth = it.lw || 2;
+      if (it.fill) { ctx.globalAlpha = it.alpha || 0.3; ctx.fillRect(x0, yy - 5, 22, 10); ctx.globalAlpha = 1; }
+      else { ctx.setLineDash(it.dash || []); ctx.beginPath(); ctx.moveTo(x0, yy); ctx.lineTo(x0 + 22, yy); ctx.stroke(); ctx.setLineDash([]); }
+      ctx.fillStyle = "#d5d9e2"; ctx.textAlign = "left"; ctx.fillText(it.label, x0 + 28, yy);
+    });
+    ctx.restore();
+  }
+
+  // ---------- Grafik 1: Wertentwicklung (log) ----------
+  function drawPaths(res) {
+    const { ctx, w, h } = setupCanvas($("c-paths"));
+    const box = { x: 78, y: 34, w: w - 92, h: h - 76 };
+    const { times, bands, samplePaths } = res;
+    let lo = Infinity, hi = 0;
+    for (let j = 0; j < times.length; j++) { lo = Math.min(lo, bands.p5[j]); hi = Math.max(hi, bands.p95[j]); }
+    for (const p of samplePaths) for (const v of p) { if (v > 0) { lo = Math.min(lo, v); hi = Math.max(hi, v); } }
+    lo = Math.max(lo * 0.9, 1); hi *= 1.1;
+    const T = times[times.length - 1];
+    const X = t => box.x + (t / T) * box.w;
+    const Y = v => box.y + box.h - (Math.log(Math.max(v, lo)) - Math.log(lo)) / (Math.log(hi) - Math.log(lo)) * box.h;
+
+    frame(ctx, box, "Wertentwicklung (log)");
+    ctx.fillStyle = "#b8bfcc"; ctx.textAlign = "right"; ctx.textBaseline = "middle";
+    for (const v of logTicks(lo, hi)) { const y = Y(v); gridLine(ctx, box.x, y, box.x + box.w, y); ctx.fillText(euro(v), box.x - 6, y); }
+    ctx.textAlign = "center"; ctx.textBaseline = "top";
+    for (const t of niceTicks(0, T, 5)) { const x = X(t); gridLine(ctx, x, box.y, x, box.y + box.h); ctx.fillText(de0.format(t) + " J.", x, box.y + box.h + 6); }
+    ctx.fillText("Jahre", box.x + box.w / 2, box.y + box.h + 24);
+
+    ctx.save(); ctx.beginPath(); ctx.rect(box.x, box.y, box.w, box.h); ctx.clip();
+    function band(a, b, color, alpha) {
+      ctx.globalAlpha = alpha; ctx.fillStyle = color; ctx.beginPath();
+      times.forEach((t, j) => j ? ctx.lineTo(X(t), Y(a[j])) : ctx.moveTo(X(t), Y(a[j])));
+      for (let j = times.length - 1; j >= 0; j--) ctx.lineTo(X(times[j]), Y(b[j]));
+      ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
+    }
+    ctx.strokeStyle = "#3fa7ff"; ctx.lineWidth = 0.6; ctx.globalAlpha = 0.14;
+    for (const p of samplePaths) {
+      ctx.beginPath();
+      times.forEach((t, j) => j ? ctx.lineTo(X(t), Y(p[j])) : ctx.moveTo(X(t), Y(p[j])));
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    band(bands.p5, bands.p95, "#ff5d73", 0.12);
+    band(bands.p25, bands.p75, "#38d996", 0.20);
+    ctx.strokeStyle = "#aaaaaa"; ctx.lineWidth = 2.5; ctx.beginPath();
+    times.forEach((t, j) => j ? ctx.lineTo(X(t), Y(bands.p50[j])) : ctx.moveTo(X(t), Y(bands.p50[j])));
+    ctx.stroke();
+    ctx.restore();
+
+    legend(ctx, box.x + 10, box.y + 14, [
+      { label: "Median", color: "#aaaaaa", lw: 2.5 },
+      { label: "P25–P75", color: "#38d996", fill: true, alpha: 0.35 },
+      { label: "P5–P95", color: "#ff5d73", fill: true, alpha: 0.25 },
+    ]);
+  }
+
+  // ---------- Grafik 2: Endwerte ----------
+  function drawHist(res) {
+    const { ctx, w, h } = setupCanvas($("c-hist"));
+    const box = { x: 56, y: 34, w: w - 70, h: h - 76 };
+    const { finals, pct } = res;
+    const xMax = pct[99];
+    let xMin = Infinity; for (const v of finals) if (v < xMin) xMin = v;
+    const bins = 80, counts = new Array(bins).fill(0), bw = (xMax - xMin) / bins;
+    for (const v of finals) if (v <= xMax) counts[Math.min(bins - 1, Math.floor((v - xMin) / bw))]++;
+    const cMax = Math.max(...counts) * 1.08;
+    const X = v => box.x + (v - xMin) / (xMax - xMin) * box.w;
+    const Y = c => box.y + box.h - c / cMax * box.h;
+
+    frame(ctx, box, "Endwerte");
+    ctx.fillStyle = "#b8bfcc"; ctx.textAlign = "right"; ctx.textBaseline = "middle";
+    for (const c of niceTicks(0, cMax, 5)) { const y = Y(c); gridLine(ctx, box.x, y, box.x + box.w, y); ctx.fillText(de0.format(c), box.x - 6, y); }
+    ctx.textAlign = "center"; ctx.textBaseline = "top";
+    for (const v of niceTicks(xMin, xMax, 4)) { if (v < xMin) continue; ctx.fillText(euro(v), X(v), box.y + box.h + 6); }
+    ctx.fillText("Wert", box.x + box.w / 2, box.y + box.h + 24);
+    ctx.save(); ctx.translate(14, box.y + box.h / 2); ctx.rotate(-Math.PI / 2); ctx.fillText("Häufigkeit", 0, -6); ctx.restore();
+
+    const centers = counts.map((_, i) => xMin + (i + 0.5) * bw);
+    let medIdx = 0; centers.forEach((c, i) => { if (Math.abs(c - pct[50]) < Math.abs(centers[medIdx] - pct[50])) medIdx = i; });
+    centers.forEach((c, i) => {
+      let col;
+      if (i === medIdx) col = "#ff3b30";
+      else if (c < pct[25] || c > pct[75]) col = "#38d996";
+      else if (c < pct[50]) col = cmap(GRAD_LEFT, Math.sqrt((c - pct[25]) / (pct[50] - pct[25])));
+      else col = cmap(GRAD_RIGHT, Math.sqrt((c - pct[50]) / (pct[75] - pct[50])));
+      const x0 = X(xMin + i * bw), x1 = X(xMin + (i + 1) * bw);
+      ctx.fillStyle = col; ctx.fillRect(x0, Y(counts[i]), Math.max(1, x1 - x0 - 0.6), box.y + box.h - Y(counts[i]));
+    });
+    function vline(v, color, dash, lw) {
+      if (v < xMin || v > xMax) return;
+      ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.setLineDash(dash);
+      ctx.beginPath(); ctx.moveTo(X(v), box.y); ctx.lineTo(X(v), box.y + box.h); ctx.stroke(); ctx.restore();
+    }
+    vline(pct[50], "#aaaaaa", [], 1.8);
+    vline(pct[5], "#ff5d73", [2, 3], 2);
+    vline(pct[95], "#38d996", [2, 3], 2);
+
+    legend(ctx, box.x + box.w - 10, box.y + 14, [
+      { label: "Median", color: "#aaaaaa", lw: 1.8 },
+      { label: "P5", color: "#ff5d73", dash: [2, 3] },
+      { label: "P95", color: "#38d996", dash: [2, 3] },
+      { label: "P25 (Farbgrenze)", color: "#38d996", dash: [6, 4] },
+      { label: "P75 (Farbgrenze)", color: "#38d996", dash: [6, 4] },
+    ], true);
+    ctx.save(); ctx.fillStyle = "#aaaaaa"; ctx.textAlign = "right"; ctx.textBaseline = "top";
+    ctx.font = "12px ui-monospace, Consolas, monospace";
+    [`Median: ${de0.format(pct[50])} €`, `P25:    ${de0.format(pct[25])} €`, `P75:    ${de0.format(pct[75])} €`]
+      .forEach((s, i) => ctx.fillText(s, box.x + box.w - 10, box.y + box.h * 0.45 + i * 17));
+    ctx.restore();
+  }
+
+  // ---------- Monte Carlo starten ----------
+  const workerUrl = URL.createObjectURL(new Blob([$("mc-worker").textContent], { type: "text/javascript" }));
+  let workers = [], mcResult = null;
+
+  $("mc-run").addEventListener("click", () => {
+    const p = {
+      init: num("mc-init"), cagr: num("mc-cagr"), vol: num("mc-vol"),
+      years: Math.round(num("mc-years")), rate: num("mc-rate"),
+      n: Math.round(num("mc-n")), steps: Math.round(num("mc-steps")), seed: Math.round(num("mc-seed")) || 0,
+    };
+    if ([p.init, p.cagr, p.vol, p.years, p.rate, p.n, p.steps].some(v => !isFinite(v)) || p.years < 1 || p.n < 100 || p.steps < 1) {
+      $("mc-status").textContent = "Bitte alle Felder mit gültigen Zahlen füllen (mindestens 1 Jahr, 100 Simulationen, 1 Zeitschritt).";
+      return;
+    }
+    if (p.n * p.years * p.steps > 4e8) {
+      $("mc-status").textContent = "Das sind zu viele Rechenschritte für den Browser – weniger Simulationen oder Zeitschritte wählen.";
+      return;
+    }
+    // Simulationen auf mehrere Prozessorkerne verteilen
+    stopWorkers();
+    const W = Math.max(1, Math.min(8, (navigator.hardwareConcurrency || 4) - 1, Math.floor(p.n / 100)));
+    const parts = [], done = new Array(W).fill(0);
+    const t0 = performance.now();
+    $("mc-run").disabled = true;
+    $("mc-progress").style.display = "block";
+    $("mc-progress").firstElementChild.style.width = "0";
+    $("mc-status").textContent = `Simuliere auf ${W} Prozessorkernen …`;
+    for (let k = 0; k < W; k++) {
+      const nk = Math.floor(p.n / W) + (k < p.n % W ? 1 : 0);
+      const w = new Worker(workerUrl);
+      workers.push(w);
+      w.onmessage = e => {
+        const d = e.data;
+        if (d.type === "progress") {
+          done[k] = d.done;
+          $("mc-progress").firstElementChild.style.width = (done.reduce((a, b) => a + b, 0) / p.n * 100).toFixed(1) + "%";
+          return;
+        }
+        parts[k] = d;
+        if (parts.filter(Boolean).length < W) return;
+        stopWorkers();
+        mcResult = combine(parts, p);
+        $("mc-run").disabled = false;
+        $("mc-progress").style.display = "none";
+        $("mc-status").textContent = `${de0.format(p.n)} Simulationen × ${de0.format(p.years * p.steps)} Schritte in ${de1.format((performance.now() - t0) / 1000)} s`;
+        $("mc-results").classList.remove("hidden");
+        renderMc();
+      };
+      w.onerror = e => {
+        stopWorkers();
+        $("mc-run").disabled = false;
+        $("mc-progress").style.display = "none";
+        $("mc-status").textContent = "Fehler bei der Berechnung: " + e.message;
+      };
+      // eigener Seed je Kern; mit Seed > 0 bleibt das Gesamtergebnis wiederholbar
+      w.postMessage({ ...p, n: nk, seed: p.seed > 0 ? p.seed * 1000 + k : 0, nSample: Math.ceil(200 / W) });
+    }
+  });
+
+  function stopWorkers() { workers.forEach(w => w.terminate()); workers = []; }
+
+  function percentileSorted(s, q) {             // wie numpy.percentile (linear)
+    const idx = (q / 100) * (s.length - 1);
+    const lo = Math.floor(idx), hi = Math.ceil(idx);
+    return s[lo] + (s[hi] - s[lo]) * (idx - lo);
+  }
+
+  // Teilergebnisse zusammenführen, Perzentile und Wahrscheinlichkeiten berechnen
+  function combine(parts, p) {
+    const R = parts[0].R, n = p.n;
+    const finals = new Float64Array(n);
+    let off = 0;
+    for (const d of parts) { finals.set(d.finals, off); off += d.n; }
+
+    const bands = { p5: new Float64Array(R), p25: new Float64Array(R), p50: new Float64Array(R), p75: new Float64Array(R), p95: new Float64Array(R) };
+    const col = new Float64Array(n);
+    for (let j = 0; j < R; j++) {
+      let o = 0;
+      for (const d of parts) { const base = j * d.n; for (let i = 0; i < d.n; i++) col[o++] = d.rec[base + i]; }
+      col.sort();
+      bands.p5[j] = percentileSorted(col, 5);
+      bands.p25[j] = percentileSorted(col, 25);
+      bands.p50[j] = percentileSorted(col, 50);
+      bands.p75[j] = percentileSorted(col, 75);
+      bands.p95[j] = percentileSorted(col, 95);
+    }
+
+    const sorted = Float64Array.from(finals).sort();
+    const pct = {};
+    for (const q of [5, 25, 50, 75, 95, 99]) pct[q] = percentileSorted(sorted, q);
+
+    const invested = p.init + p.rate * 12 * p.years;
+    let loss = 0, dbl = 0, ten = 0;
+    for (let i = 0; i < n; i++) {
+      if (finals[i] < invested) loss++;
+      if (finals[i] >= 2 * invested) dbl++;
+      if (finals[i] >= 10 * invested) ten++;
+    }
+    return {
+      times: parts[0].recSteps.map(t => t / p.steps),
+      bands, finals, pct, invested,
+      samplePaths: parts.flatMap(d => d.samplePaths),
+      probs: { loss: loss / n * 100, dbl: dbl / n * 100, ten: ten / n * 100 },
+    };
+  }
+
+  function metric(k, v) { return `<div class="metric"><div class="k">${k}</div><div class="v">${v}</div></div>`; }
+  function renderMc() {
+    if (!mcResult) return;
+    const { pct, probs, invested } = mcResult;
+    $("mc-metrics").innerHTML =
+      metric("P5", fmt(pct[5]) + " €") + metric("P25", fmt(pct[25]) + " €") + metric("Median", fmt(pct[50]) + " €") +
+      metric("P75", fmt(pct[75]) + " €") + metric("P95", fmt(pct[95]) + " €") + metric("Eingezahlt", fmt(invested) + " €");
+    $("mc-probs").innerHTML =
+      metric("Verlust", fmt(probs.loss) + " %") + metric("Verdopplung", fmt(probs.dbl) + " %") + metric("Verzehnfachung", fmt(probs.ten) + " %");
+    drawPaths(mcResult);
+    drawHist(mcResult);
+  }
+
+  // ---------- Entnahmeplan (wie entnahmeplan_nominal im Original) ----------
+  function entnahmeplanNominal(startkapital, zielwert, cagr, inflation, jahre) {
+    let faktorSumme = 0;
+    for (let i = 0; i < jahre; i++) faktorSumme += (1 + cagr) ** (jahre - 1 - i) * (1 + inflation) ** i;
+    const E0 = (startkapital * (1 + cagr) ** jahre - zielwert) / faktorSumme;
+    const rows = [];
+    let kapital = startkapital;
+    for (let t = 0; t < jahre; t++) {
+      const e = E0 * (1 + inflation) ** t;
+      kapital = kapital * (1 + cagr) - e;
+      rows.push({ jahr: t + 1, jahr_e: e, monat_e: e / 12, kapital });
+    }
+    return { E0, rows };
+  }
+
+  let entResult = null;
+  $("e-run").addEventListener("click", () => {
+    const s = num("e-start"), z = num("e-ziel"), c = num("e-cagr"), i = num("e-infl"), n = Math.round(num("e-years"));
+    if ([s, z, c, i, n].some(v => !isFinite(v)) || n < 1) { $("e-status").textContent = "Bitte alle Felder mit gültigen Zahlen füllen."; return; }
+    $("e-status").textContent = "";
+    entResult = entnahmeplanNominal(s, z, c, i, n);
+    const r = entResult.rows;
+    const summe = r.reduce((a, x) => a + x.jahr_e, 0);
+    $("e-metrics").innerHTML =
+      metric("Entnahme im 1. Jahr", fmt(entResult.E0) + " €") +
+      metric("pro Monat im 1. Jahr", fmt(entResult.E0 / 12) + " €") +
+      metric(`Entnahme im ${n}. Jahr`, fmt(r[n - 1].jahr_e) + " €") +
+      metric("Summe aller Entnahmen", fmt(summe) + " €");
+    $("e-tbody").innerHTML = r.map(x =>
+      `<tr><td>${x.jahr}</td><td>${fmt(x.jahr_e)}</td><td>${fmt(x.monat_e)}</td><td>${fmt(x.kapital)}</td></tr>`).join("");
+    $("e-results").classList.remove("hidden");
+    drawEnt();
+  });
+
+  function drawEnt() {
+    if (!entResult) return;
+    const { ctx, w, h } = setupCanvas($("c-ent"));
+    const box = { x: 84, y: 34, w: w - 100, h: h - 78 };
+    const r = entResult.rows;
+    const ys = r.map(x => x.kapital);
+    let lo = Math.min(0, ...ys), hi = Math.max(...ys) * 1.05;
+    const X = j => box.x + (r.length === 1 ? 0.5 : (j - 1) / (r.length - 1)) * box.w;
+    const Y = v => box.y + box.h - (v - lo) / (hi - lo) * box.h;
+    frame(ctx, box, "Nominaler Kapitalverlauf");
+    ctx.fillStyle = "#b8bfcc"; ctx.textAlign = "right"; ctx.textBaseline = "middle";
+    for (const v of niceTicks(lo, hi, 5)) { const y = Y(v); gridLine(ctx, box.x, y, box.x + box.w, y); ctx.fillText(euro(v), box.x - 6, y); }
+    ctx.textAlign = "center"; ctx.textBaseline = "top";
+    for (const t of niceTicks(1, r.length, 6)) { if (t < 1) continue; const x = X(t); gridLine(ctx, x, box.y, x, box.y + box.h); ctx.fillText(de0.format(t), x, box.y + box.h + 6); }
+    ctx.fillText("Jahre", box.x + box.w / 2, box.y + box.h + 24);
+    ctx.strokeStyle = "#ff7f24"; ctx.lineWidth = 2.2; ctx.beginPath();
+    r.forEach((x, j) => j ? ctx.lineTo(X(x.jahr), Y(x.kapital)) : ctx.moveTo(X(x.jahr), Y(x.kapital)));
+    ctx.stroke();
+    legend(ctx, box.x + box.w - 10, box.y + 14, [{ label: "Kapital (nominal)", color: "#ff7f24", lw: 2.2 }], true);
+  }
+
+  function redrawAll() { if (!$("view-mc").classList.contains("hidden")) renderMc(); else drawEnt(); }
+  let rt = 0;
+  window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(redrawAll, 120); });
+})();
+</script>
+</body>
+</html>
