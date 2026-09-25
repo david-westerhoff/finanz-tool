@@ -206,9 +206,16 @@
   <!-- ================= ENTNAHMEPLAN ================= -->
   <section id="view-ent" hidden>
     <div class="inputs">
+      <label>Wie willst du rechnen?</label>
+      <div class="chips" id="e-modes" role="radiogroup" aria-label="Rechenweg">
+        <button type="button" class="chip" data-emode="calc" role="radio">Entnahme ausrechnen lassen</button>
+        <button type="button" class="chip" data-emode="fix" role="radio">Entnahme selbst festlegen</button>
+      </div>
+      <p class="info" id="e-info"></p>
       <div class="grid">
         <div><label for="e-start">Startkapital</label><div class="inp"><input id="e-start" data-kind="eur" inputmode="decimal" value="300.000"><span>€</span></div></div>
-        <div><label for="e-ziel">Zielendwert</label><div class="inp"><input id="e-ziel" data-kind="eur" inputmode="decimal" value="0"><span>€</span></div><div class="hint">was am Ende übrig bleiben soll</div></div>
+        <div data-emode="fix"><label for="e-rate">Entnahme pro Monat im 1. Jahr</label><div class="inp"><input id="e-rate" data-kind="eur" inputmode="decimal" value="1.000"><span>€</span></div><div class="hint">steigt danach jedes Jahr um die Inflation</div></div>
+        <div><label for="e-ziel" id="e-ziel-l">Zielendwert</label><div class="inp"><input id="e-ziel" data-kind="eur" inputmode="decimal" value="0"><span>€</span></div><div class="hint" id="e-ziel-h">was am Ende übrig bleiben soll</div></div>
         <div><label for="e-years">Entnahmezeitraum</label><div class="inp"><input id="e-years" data-kind="int" inputmode="numeric" value="30"><span>Jahre</span></div></div>
         <div><label for="e-cagr">Erwartete Rendite</label><div class="inp"><input id="e-cagr" data-kind="pct" inputmode="decimal" value="3,5"><span>% p. a.</span></div></div>
         <div><label for="e-infl">Inflation</label><div class="inp"><input id="e-infl" data-kind="pct" inputmode="decimal" value="2"><span>% p. a.</span></div><div class="hint">so stark steigt die Entnahme jedes Jahr</div></div>
@@ -844,6 +851,38 @@
     }
     return { E0, rows };
   }
+  // Gleiche Rechnung, aber mit selbst festgelegter Entnahme im 1. Jahr
+  function entnahmeplanFest(startkapital, E0, cagr, inflation, jahre) {
+    const rows = [];
+    let kapital = startkapital;
+    for (let t = 0; t < jahre; t++) {
+      const e = E0 * (1 + inflation) ** t;
+      kapital = kapital * (1 + cagr) - e;
+      rows.push({ jahr: t + 1, jahr_e: e, monat_e: e / 12, kapital });
+    }
+    return { E0, rows };
+  }
+
+  // Rechenweg: Entnahme ausrechnen lassen oder selbst festlegen
+  let eMode = store.get("finanztool.inputs")["e-mode"] === "fix" ? "fix" : "calc";
+  function setEMode(m) {
+    eMode = m;
+    document.querySelectorAll("#e-modes .chip").forEach(b => b.setAttribute("aria-checked", b.dataset.emode === m));
+    document.querySelectorAll("#view-ent .grid > [data-emode]").forEach(el => { el.hidden = el.dataset.emode !== m; });
+    $("e-info").textContent = m === "fix"
+      ? "Du gibst vor, wie viel du im ersten Monat entnimmst. Die Seite zeigt, wie sicher das Geld reicht und was am Ende übrig bleibt."
+      : "Die Seite rechnet aus, wie viel du entnehmen kannst, damit am Ende genau der Zielendwert übrig bleibt.";
+    $("e-ziel-l").textContent = m === "fix" ? "Mindestens übrig am Ende" : "Zielendwert";
+    $("e-ziel-h").textContent = m === "fix" ? "0 € = das Geld soll nur reichen" : "was am Ende übrig bleiben soll";
+    const all = store.get("finanztool.inputs"); all["e-mode"] = m; store.set("finanztool.inputs", all);
+  }
+  $("e-modes").addEventListener("click", e => {
+    const b = e.target.closest("[data-emode]");
+    if (!b) return;
+    setEMode(b.dataset.emode);
+    if (entResult) $("e-run").click();
+  });
+  setEMode(eMode);
 
   function mulberry32(a) {
     return function () {
@@ -900,9 +939,9 @@
       success: frac(sMax, s => s >= 1 - 1e-9),
       ruinP: ruinYears.length / n * 100,
       ruinMed: ruinYears.length ? percentileSorted(ruinYears, 50) : null,
-      moreThanStart: frac(endK, v => v >= S),
+      lossP: frac(endK, v => v < S),
       halfLeft: frac(endK, v => v >= S / 2),
-      endMed: percentileSorted(Float64Array.from(endK).sort(), 50),
+      ...(() => { const s = Float64Array.from(endK).sort(); return { endMed: percentileSorted(s, 50), endP5: percentileSorted(s, 5), endP95: percentileSorted(s, 95) }; })(),
       safe: q2 => Math.max(0, percentileSorted(sSorted, 100 - q2)) * plan.E0,
     };
   }
@@ -918,7 +957,12 @@
       return;
     }
     if (q.n * q.T > 5e6) { $("e-status").textContent = "Zu viele Simulationen für diesen Zeitraum – bitte weniger wählen."; return; }
-    const plan = entnahmeplanNominal(q.S, q.ziel, q.c, q.infl, q.T);
+    let plan;
+    if (eMode === "fix") {
+      const rate = num("e-rate");
+      if (!(rate > 0)) { $("e-status").textContent = "Bitte eine Entnahme pro Monat größer 0 € eintragen."; return; }
+      plan = entnahmeplanFest(q.S, rate * 12, q.c, q.infl, q.T);
+    } else plan = entnahmeplanNominal(q.S, q.ziel, q.c, q.infl, q.T);
     if (!(plan.E0 > 0)) {
       $("e-status").textContent = "Mit dieser Rendite erreicht das Startkapital den Zielendwert nicht einmal ohne Entnahmen.";
       $("e-results").hidden = true;
@@ -937,13 +981,19 @@
     const { q, plan, sim } = entResult, r = plan.rows, T = q.T;
     const summe = r.reduce((a, x) => a + x.jahr_e, 0);
     const safe90 = sim.safe(90);
+    const planEnd = r[T - 1].kapital, emptyYear = (r.find(x => x.kapital < 0) || {}).jahr;
     $("e-head").innerHTML = `Mit <b>${eur(plan.E0 / 12)}</b> im Monat im 1. Jahr (danach jedes Jahr +${de2.format(q.infl * 100)} %) ` +
-      `geht der Plan in <b>${pctf(sim.success)}</b> der Verläufe auf. Für 90 % Sicherheit wären es ${eur(safe90 / 12)} im Monat.`;
+      `geht der Plan in <b>${pctf(sim.success)}</b> der Verläufe auf. Am Ende bleiben im Median <b>${eur(sim.endMed)}</b> übrig, ` +
+      `in 9 von 10 Verläufen zwischen ${eur(sim.endP5)} und ${eur(sim.endP95)}. Für 90 % Sicherheit wären es ${eur(safe90 / 12)} im Monat.`;
     $("e-metrics").innerHTML =
       tile("Entnahme im 1. Jahr", eur(plan.E0), `${eur(plan.E0 / 12)} im Monat`, { hl: true }) +
       tile(`Entnahme im ${T}. Jahr`, eur(r[T - 1].jahr_e), `${eur(r[T - 1].monat_e)} im Monat`) +
       tile("Summe aller Entnahmen", eur(summe), `über ${T} Jahre`) +
-      tile("Endkapital im Median", eur(sim.endMed), "bei schwankender Rendite");
+      tile("Endkapital im Median", eur(sim.endMed), "bei schwankender Rendite", { hl: true }) +
+      tile("Endkapital P5", eur(sim.endP5), "nur 1 von 20 Verläufen endet darunter") +
+      tile("Endkapital P95", eur(sim.endP95), "nur 1 von 20 Verläufen endet darüber") +
+      tile("Endkapital mit fester Rendite", planEnd >= 0 ? eur(planEnd) : "aufgebraucht",
+        planEnd >= 0 ? `wenn jedes Jahr genau ${pctf(q.c * 100)} kommen` : `schon in Jahr ${emptyYear}, bei genau ${pctf(q.c * 100)} Rendite`);
     const red = "var(--red)";
     let pr =
       tile("Plan geht auf", pctf(sim.success), q.ziel > 0 ? `Geld reicht ${T} Jahre, am Ende bleiben mindestens ${eur(q.ziel)}` : `Geld reicht alle ${T} Jahre`, { bar: sim.success }) +
@@ -953,7 +1003,7 @@
       pr += tile("Ziel verfehlt", pctf(miss), "Geld reicht, aber am Ende bleibt weniger als das Ziel", { bar: miss, color: "var(--gold)" });
     }
     pr +=
-      tile("Mehr als das Startkapital übrig", pctf(sim.moreThanStart), `am Ende über ${eur(q.S)}`, { bar: sim.moreThanStart }) +
+      tile("Verlust", pctf(sim.lossP), `am Ende weniger als die ${eur(q.S)} vom Anfang übrig`, { bar: sim.lossP, color: red }) +
       tile("Mindestens die Hälfte übrig", pctf(sim.halfLeft), `am Ende über ${eur(q.S / 2)}`, { bar: sim.halfLeft });
     $("e-probs").innerHTML = pr;
     const levels = [50, 75, 90, 95, 99];
@@ -963,7 +1013,7 @@
     $("e-safe").innerHTML = rows.map(x =>
       `<tr${x.mark ? ' class="mark"' : ""}><td>${x.mark ? pctf(x.l) + " (dein Plan)" : x.l + " % der Verläufe"}</td><td>${eur(x.y / 12)}</td><td>${eur(x.y)}</td></tr>`).join("");
     $("e-tbody").innerHTML = r.map(x =>
-      `<tr><td>${x.jahr}</td><td>${eur(x.jahr_e)}</td><td>${eur(x.monat_e)}</td><td>${eur(x.kapital)}</td></tr>`).join("");
+      `<tr><td>${x.jahr}</td><td>${eur(x.jahr_e)}</td><td>${eur(x.monat_e)}</td><td>${x.kapital >= 0 ? eur(x.kapital) : "aufgebraucht"}</td></tr>`).join("");
     drawFan($("c-ent"), { times: sim.times, bands: sim.bands, plan: [q.S, ...r.map(x => x.kapital)] });
     drawSurvival($("c-surv"), sim.alive, sim.n);
   }
