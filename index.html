@@ -60,6 +60,11 @@
   .inputs { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 18px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 16px 18px; }
   label { display: block; font-size: .95rem; font-weight: 600; margin-bottom: 6px; }
+  .lab { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .lab label { margin-bottom: 0; }
+  .ib { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--muted); background: none; color: var(--muted); font: italic 700 .75rem Georgia, serif; line-height: 1; padding: 0; cursor: pointer; }
+  .ib:hover, .ib[aria-expanded="true"] { border-color: var(--acc); color: var(--acc); }
+  .ipop { font-size: .88rem; line-height: 1.5; color: var(--ink); background: var(--panel-2); border: 1px solid var(--line); border-left: 3px solid var(--acc); border-radius: 0 10px 10px 0; padding: 9px 12px; margin: 0 0 8px; }
   .inp { display: flex; align-items: center; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; }
   .inp:focus-within { border-color: var(--acc); }
   .inp input { flex: 1; min-width: 0; font: 600 1.08rem Figtree, system-ui, sans-serif; color: var(--ink); background: none; border: 0; padding: 10px 12px; outline: none; font-variant-numeric: tabular-nums; }
@@ -562,6 +567,60 @@
     el.value = el.dataset.kind === "pct" ? de2.format(v * 100) : el.dataset.kind === "eur" ? de2.format(v) : de0.format(v);
   }
 
+  // ---------- Erklärungen hinter dem kleinen „i“ ----------
+  const VOL = "Wie stark der Wert von Jahr zu Jahr schwankt, nicht ob er steigt. Bei 8 % Rendite und 15 % Volatilität liegt das Ergebnis in etwa 2 von 3 Jahren zwischen −7 % und +23 %. " +
+    "Grobe Richtwerte: Tagesgeld 0 %, Anleihen-ETF 4–6 %, Mischfonds 8–10 %, Welt-Aktien-ETF (z. B. MSCI World) 15 %, einzelne Aktie 25–40 %, Bitcoin 60–80 %.";
+  const RENDITE = "Die durchschnittliche Jahresrendite über die ganze Zeit. Grobe Richtwerte der Vergangenheit: Welt-Aktien-ETF 7–8 %, Mischfonds 4–5 %, Anleihen 2–3 %, Tagesgeld 1–3 %. Die Zukunft kann anders aussehen.";
+  const INFL = "Wie stark die Preise pro Jahr steigen. Die Europäische Zentralbank peilt 2 % an, das ist auch ungefähr der langjährige Schnitt in Deutschland.";
+  const SIMS = "Wie viele zufällige Börsenverläufe berechnet werden. Mehr Verläufe machen die Zahlen stabiler, aber die Rechnung langsamer. 10.000 bis 20.000 reichen.";
+  const SEED = "Startwert für den Zufall. Bei 0 kommen jedes Mal andere Verläufe heraus. Mit einer festen Zahl, z. B. 42, liefern gleiche Eingaben immer genau dasselbe Ergebnis – praktisch, um zwei Einstellungen fair zu vergleichen.";
+  const EINSTAND = "Was du ursprünglich für die Anteile bezahlt hast. Steht in der Bank-App meist als „Einstandswert“ oder „Kaufwert“. Einfach gerechnet: heutiger Wert minus angezeigter Gewinn. Versteuert wird nur der Gewinn, nicht das ganze Geld.";
+  const FB = "So viel Kapitalertrag pro Jahr bleibt steuerfrei: 1.000 € für Einzelne, 2.000 € für Ehepaare. Ohne Freistellungsauftrag bei der Bank bekommst du die Steuer darauf erst über die Steuererklärung zurück.";
+  const PG = "Liegt dein persönlicher Steuersatz unter 25 %, kannst du in der Steuererklärung die Günstigerprüfung beantragen und zahlst dann nur deinen eigenen Satz. Gemeint ist der Satz auf zusätzliches Einkommen; bei Studierenden mit wenig Einkommen oft 0 %. Leer lassen = nicht berücksichtigen.";
+  const KIST = "Nur wenn du Mitglied einer Kirche bist: 8 % in Bayern und Baden-Württemberg, sonst 9 %, jeweils auf die Abgeltungsteuer. Die Abgeltungsteuer sinkt dadurch etwas, weil die Kirchensteuer abziehbar ist.";
+  const INFO = {
+    "mc-init": "Der Betrag, den du am Anfang auf einmal anlegst.",
+    "mc-years": "Wie viele Jahre das Geld angelegt bleibt, bevor du nachsiehst, was daraus geworden ist.",
+    "mc-cagr": RENDITE, "mc-vol": VOL, "mc-infl": INFL + " Hier dient sie nur dazu, das Ergebnis in heutiges Geld umzurechnen.",
+    "mc-n": SIMS, "mc-seed": SEED,
+    "mc-steps": "Wie oft pro Jahr ein neuer Kurs gewürfelt wird. 12 = jeden Monat. Mehr Schritte ändern am Ergebnis kaum etwas, machen die Rechnung aber langsamer.",
+    "e-start": "Das Vermögen, von dem du ab jetzt lebst oder regelmäßig etwas entnimmst.",
+    "e-rate": "Was du im ersten Jahr pro Monat entnimmst. Danach steigt der Betrag jedes Jahr um die Inflation, damit du dir weiterhin gleich viel leisten kannst.",
+    "e-ziel": "Wie viel am Ende des Zeitraums mindestens noch übrig sein soll, z. B. als Reserve oder Erbe. 0 € heißt: Das Geld darf genau aufgebraucht werden.",
+    "e-years": "Wie viele Jahre lang du entnehmen willst, z. B. von der Rente bis 95.",
+    "e-cagr": RENDITE + " Wer im Ruhestand entnimmt, hält oft einen Mix aus Aktien und Anleihen, deshalb ist hier 3,5 % voreingestellt.",
+    "e-infl": INFL + " Um diesen Satz steigt deine Entnahme jedes Jahr.",
+    "e-vol": VOL + " Ein Mix aus 60 % Aktien und 40 % Anleihen liegt bei etwa 10 %.",
+    "e-buy": EINSTAND, "e-fb": FB, "e-pg": PG, "e-kist": KIST, "e-n": SIMS, "e-seed": SEED,
+    "k-value": "Was die Anlage heute wert ist, also was du beim Verkauf bekommst.",
+    "k-buy": EINSTAND, "k-fb": FB, "k-pg": PG, "k-kist": KIST,
+    "k-zins": "Alle Zinsen eines Jahres aus Tagesgeld, Festgeld oder Anleihen zusammen.",
+    "k-held": "Krypto ist steuerfrei, wenn du es länger als ein Jahr gehalten hast. Sonst gilt dein persönlicher Steuersatz.",
+    "k-prate": "Dein persönlicher Einkommensteuersatz auf zusätzliches Einkommen. Er gilt für Krypto-Gewinne innerhalb eines Jahres, sobald sie im Jahr 1.000 € erreichen.",
+    "k-fbused": "Hast du dieses Jahr schon Zinsen oder Dividenden bekommen, ist dieser Teil des Sparerpauschbetrags schon verbraucht.",
+    "k-vt": "Verluste aus früheren Verkäufen (z. B. Fonds, ETFs, Anleihen) merkt sich die Bank und verrechnet sie mit späteren Gewinnen. Steht in der Steuerübersicht deiner Bank.",
+    "k-vta": "Verluste aus Einzelaktien dürfen nur mit Gewinnen aus Einzelaktien verrechnet werden, deshalb hat die Bank dafür einen eigenen Topf.",
+    "k-vp": "Bei thesaurierenden Fonds zahlst du jedes Jahr vorab etwas Steuer (Vorabpauschale). Beim Verkauf wird diese Summe vom Gewinn abgezogen, damit nichts doppelt versteuert wird. Steht auf den jährlichen Steuerbescheinigungen.",
+    "k-vkp": "Kosten beim Verkauf in Prozent, z. B. Provision oder der Unterschied zwischen Kauf- und Verkaufskurs (Spread).",
+    "k-vke": "Feste Gebühr pro Verkauf, z. B. 1 € bei vielen Neobrokern.",
+    "k-split": "Verkaufst du nicht alles auf einmal, sondern verteilt über mehrere Jahre, gibt es den Sparerpauschbetrag jedes Jahr neu. Das kann Steuern sparen.",
+  };
+  Object.entries(INFO).forEach(([id, text]) => {
+    const lab = document.querySelector(`label[for="${id}"]`);
+    if (!lab) return;
+    const row = document.createElement("div"); row.className = "lab";
+    lab.before(row); row.append(lab);
+    const btn = document.createElement("button");
+    btn.type = "button"; btn.className = "ib"; btn.textContent = "i";
+    btn.setAttribute("aria-label", "Erklärung"); btn.setAttribute("aria-expanded", "false");
+    const pop = document.createElement("div"); pop.className = "ipop"; pop.hidden = true; pop.textContent = text;
+    row.append(btn); row.after(pop);
+    btn.addEventListener("click", () => {
+      pop.hidden = !pop.hidden;
+      btn.setAttribute("aria-expanded", String(!pop.hidden));
+    });
+  });
+
   // ---------- Merken (nur auf diesem Gerät) ----------
   const store = {
     get(k) { try { return JSON.parse(localStorage.getItem(k)) || {}; } catch (e) { return {}; } },
@@ -588,7 +647,45 @@
         $(RUN[el.id.split("-")[0]]).click();
       }
     });
+    if (el.dataset.kind === "eur" || el.dataset.kind === "int") {
+      el.addEventListener("focus", () => { el._prev = el.value; });
+      el.addEventListener("input", e => liveGroup(el, e));
+    }
   });
+
+  // Tausenderpunkte schon beim Tippen setzen, Cursor bleibt an derselben Ziffer
+  function liveGroup(el, e) {
+    let v = el.value, pos = el.selectionStart ?? v.length;
+    if (e.inputType === "insertFromPaste") {           // eingefügt: wie beim Rechnen einlesen
+      const x = num(el.id);
+      if (isFinite(x)) { el.value = el._prev = x.toLocaleString("de-DE", { maximumFractionDigits: 2 }); return; }
+    }
+    // Ein getippter Punkt ist ein Komma (Punkte setzt die Seite selbst), wichtig für Handy-Tastaturen ohne Komma
+    if (e.inputType === "insertText" && e.data && e.data.includes(".")) {
+      const s = pos - e.data.length;
+      if (s >= 0 && v.slice(s, pos) === e.data) v = v.slice(0, s) + e.data.replace(/\./g, ",") + v.slice(pos);
+    }
+    // Rücktaste/Entf auf einem Tausenderpunkt löscht die Ziffer daneben, sonst käme der Punkt gleich wieder
+    const prev = el._prev ?? "";
+    if (prev.length - v.length === 1) {
+      if (e.inputType === "deleteContentBackward" && prev[pos] === "." && pos > 0) { v = v.slice(0, pos - 1) + v.slice(pos); pos--; }
+      else if (e.inputType === "deleteContentForward" && prev[pos] === "." && pos < v.length) { v = v.slice(0, pos) + v.slice(pos + 1); }
+    }
+    const keep = c => /[\d,-]/.test(c);
+    const before = [...v.slice(0, pos)].filter(keep).length;
+    let raw = [...v].filter(keep).join("");
+    const neg = raw.startsWith("-"); raw = raw.replace(/-/g, "");
+    const i = raw.indexOf(",");
+    let int = i < 0 ? raw : raw.slice(0, i), dec = i < 0 ? null : raw.slice(i + 1).replace(/,/g, "");
+    if (el.dataset.kind === "eur" && dec !== null) dec = dec.slice(0, 2);
+    const out = (neg ? "-" : "") + int.replace(/\B(?=(\d{3})+(?!\d))/g, ".") + (dec !== null ? "," + dec : "");
+    el._prev = out;
+    if (out === el.value) return;
+    el.value = out;
+    let n = 0, p = 0;
+    while (p < out.length && n < before) { if (keep(out[p])) n++; p++; }
+    el.setSelectionRange(p, p);
+  }
   function hasResult(p) { return p === "mc" ? !!mcResult : p === "e" ? !!entResult : p === "k" ? !!kstResult : false; }
   function remember(mode, text) { const l = store.get("finanztool.last"); l[mode] = text; store.set("finanztool.last", l); }
 
