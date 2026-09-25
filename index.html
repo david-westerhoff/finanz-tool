@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Finanz-Tool</title>
-<meta name="description" content="Monte-Carlo-Simulation für Anlagen und Entnahmeplan mit Wahrscheinlichkeiten – läuft komplett im Browser.">
+<meta name="description" content="Vermögensentwicklung (Monte-Carlo-Simulation), Entnahmeplan und Steuern mit Wahrscheinlichkeiten – läuft komplett im Browser.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f1419'/%3E%3Cpath d='M5 25 L12 17 L17 21 L27 8' stroke='%233ddc97' stroke-width='3.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -37,6 +37,7 @@
   h1 { font-family: Unbounded, Figtree, sans-serif; font-size: 1.4rem; margin: 0; letter-spacing: .01em; }
   h1 span { color: var(--acc); }
   .mode-name { font-family: Figtree, sans-serif; color: var(--muted); font-weight: 700; margin-left: 10px; font-size: 1.05rem; }
+  @media (max-width: 600px) { .mode-name { display: block; margin: 4px 0 0; } }
   button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
 
   .btn { font: inherit; font-weight: 700; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); color: var(--ink); padding: 9px 16px; cursor: pointer; }
@@ -52,6 +53,7 @@
   .mode:hover { transform: translateY(-3px); border-color: var(--acc); }
   .mode svg { width: 100%; height: 150px; display: block; border-radius: 12px; background: radial-gradient(circle at 50% 40%, #213040 0%, #121a22 75%); }
   .mode h3 { margin: 0; font-size: 1.25rem; }
+  .paren { font-size: .7em; font-weight: 600; color: var(--muted); white-space: nowrap; }
   .mode p { margin: 3px 0 0; color: var(--muted); font-size: .95rem; }
   .mode .stat { font-size: .9rem; color: var(--acc); font-weight: 600; font-variant-numeric: tabular-nums; }
 
@@ -310,7 +312,7 @@
       <p class="info" id="k-info"></p>
 
       <div class="grid">
-        <div data-for="etf misch rente aktie krypto"><label for="k-value">Verkaufswert</label><div class="inp"><input id="k-value" data-kind="eur" inputmode="decimal" value="50.000"><span>€</span></div><div class="hint">was die Anlage heute wert ist, z. B. der Median aus Monte Carlo</div></div>
+        <div data-for="etf misch rente aktie krypto"><label for="k-value">Verkaufswert</label><div class="inp"><input id="k-value" data-kind="eur" inputmode="decimal" value="50.000"><span>€</span></div><div class="hint">was die Anlage heute wert ist, z. B. der Median aus der Vermögensentwicklung</div></div>
         <div data-for="etf misch rente aktie krypto"><label for="k-buy">Einstandswert</label><div class="inp"><input id="k-buy" data-kind="eur" inputmode="decimal" value="30.000"><span>€</span></div><div class="hint">was du insgesamt dafür bezahlt hast</div></div>
         <div data-for="zins"><label for="k-zins">Zinsen im Jahr</label><div class="inp"><input id="k-zins" data-kind="eur" inputmode="decimal" value="1.500"><span>€</span></div></div>
         <div data-for="krypto"><label for="k-held">Haltedauer</label><select id="k-held"><option value="1">länger als 1 Jahr</option><option value="0">1 Jahr oder kürzer</option></select></div>
@@ -522,7 +524,9 @@
   function remember(mode, text) { const l = store.get("finanztool.last"); l[mode] = text; store.set("finanztool.last", l); }
 
   // ---------- Menü ----------
-  const MODES = { mc: "Monte-Carlo Simulation", ent: "Entnahmeplan", kst: "Steuern & Kosten" };
+  const MODES = { mc: "Vermögensentwicklung (Monte-Carlo Simulation)", ent: "Entnahmeplan", kst: "Steuern & Kosten" };
+  // Klammerzusatz kleiner setzen: „Name (Zusatz)“
+  const modeHtml = s => s.replace(/ \((.+)\)$/, ' <small class="paren">($1)</small>').replace("&", "&amp;");
   const SVG_MC = `<svg viewBox="0 0 200 120" aria-hidden="true">
     <path d="M18 98 C60 86 110 60 184 18 L184 58 C120 78 70 92 18 98Z" fill="rgba(90,169,255,.22)"/>
     <path d="M18 98 C62 88 110 70 184 34 L184 50 C118 76 70 90 18 98Z" fill="rgba(61,220,151,.4)"/>
@@ -559,7 +563,7 @@
       { mode: "ent", svg: SVG_ENT, text: "Wie viel kannst du jedes Jahr entnehmen, und wie sicher reicht das Geld bis zum Ende?" },
       { mode: "kst", svg: SVG_KST, text: "Was bleibt nach Steuern? Anlageart wählen, Betrag eingeben und die Steuerrechnung Schritt für Schritt sehen." },
     ];
-    $("modes").innerHTML = cards.map(c => `<button class="mode" data-mode="${c.mode}">${c.svg}<div><h3>${MODES[c.mode]}</h3><p>${c.text}</p></div>${last[c.mode] ? `<span class="stat">${last[c.mode]}</span>` : ""}</button>`).join("");
+    $("modes").innerHTML = cards.map(c => `<button class="mode" data-mode="${c.mode}">${c.svg}<div><h3>${modeHtml(MODES[c.mode])}</h3><p>${c.text}</p></div>${last[c.mode] ? `<span class="stat">${last[c.mode]}</span>` : ""}</button>`).join("");
   }
   $("modes").addEventListener("click", e => { const b = e.target.closest("[data-mode]"); if (b) location.hash = b.dataset.mode; });
   $("back").addEventListener("click", () => { location.hash = ""; });
@@ -573,7 +577,7 @@
     $("view-ent").hidden = mode !== "ent";
     $("view-kst").hidden = mode !== "kst";
     $("back").hidden = !mode;
-    $("mode-name").textContent = mode ? MODES[mode] : "";
+    $("mode-name").innerHTML = mode ? modeHtml(MODES[mode]) : "";
     document.title = mode ? MODES[mode] + " · Finanz-Tool" : "Finanz-Tool";
     if (!mode) renderMenu(); else redrawAll();
     window.scrollTo(0, 0);
