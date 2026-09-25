@@ -54,6 +54,21 @@
   .mode h3 { margin: 0; font-size: 1.25rem; }
   .paren { font-size: .82em; font-weight: 600; color: inherit; white-space: nowrap; }
   .mode p { margin: 3px 0 0; color: var(--muted); font-size: .95rem; }
+  /* Karten in Zeile 1, Erklärungen in Zeile 2: eine aufgeklappte Erklärung zieht die anderen Karten nicht mit */
+  .mode-wrap { display: contents; }
+  @media (min-width: 721px) { .modes { row-gap: 8px; } .mode-wrap .mode { grid-row: 1; } .mode-wrap .how { grid-row: 2; align-self: start; } }
+  @media (max-width: 720px) { .mode-wrap .how { margin: -8px 0 8px; } }
+  .how { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
+  .how summary { cursor: pointer; padding: 10px 16px; font-weight: 600; font-size: .92rem; color: var(--muted); list-style: none; }
+  .how summary::-webkit-details-marker { display: none; }
+  .how summary::before { content: "ⓘ "; }
+  .how summary::after { content: " ▾"; }
+  .how[open] summary::after { content: " ▴"; }
+  .how summary:hover, .how[open] summary { color: var(--acc); }
+  .how dl { margin: 0; padding: 0 16px 14px; font-size: .9rem; line-height: 1.5; }
+  .how dt { font-weight: 700; margin-top: 10px; }
+  .how dt:first-child { margin-top: 0; }
+  .how dd { margin: 2px 0 0; color: var(--ink); opacity: .88; }
   .mode .stat { font-size: .9rem; color: var(--acc); font-weight: 600; font-variant-numeric: tabular-nums; }
 
   /* Eingaben */
@@ -725,11 +740,32 @@
   function renderMenu() {
     const last = store.get("finanztool.last");
     const cards = [
-      { mode: "mc", svg: SVG_MC, text: "Wie viel kann aus einer Anlage werden? Tausende zufällige Börsenverläufe zeigen Spanne und Chancen." },
-      { mode: "ent", svg: SVG_ENT, text: "Wie viel kannst du jedes Jahr entnehmen, und wie sicher reicht das Geld bis zum Ende?" },
-      { mode: "kst", svg: SVG_KST, text: "Was bleibt nach Steuern? Anlageart wählen, Betrag eingeben und die Steuerrechnung Schritt für Schritt sehen." },
+      { mode: "mc", svg: SVG_MC, text: "Wie viel kann aus einer Anlage werden? Tausende zufällige Börsenverläufe zeigen Spanne und Chancen.",
+        how: [
+          ["Wofür", "Du legst Geld an, einmalig und/oder monatlich, und willst wissen, was nach einigen Jahren daraus werden kann."],
+          ["So geht's", "Anfangsbetrag, Sparrate, Jahre, erwartete Rendite und Volatilität eintragen, dann „Simulation starten“. Das kleine „i“ an jedem Feld erklärt, was hineingehört."],
+          ["Was du bekommst", "Oben der Median und die wichtigsten Wahrscheinlichkeiten (Verlust, Verdopplung). Darunter der Fächer möglicher Verläufe und die Verteilung der Endwerte, ganz unten „Weitere Kennzahlen“."],
+          ["Gut zu wissen", "Der Schalter „In heutigem Geld“ rechnet die Inflation heraus. Die Seite sagt nichts voraus, sie zeigt, wie breit die Möglichkeiten sind."],
+        ] },
+      { mode: "ent", svg: SVG_ENT, text: "Wie viel kannst du jedes Jahr entnehmen, und wie sicher reicht das Geld bis zum Ende?",
+        how: [
+          ["Wofür", "Du hast ein Vermögen und willst regelmäßig davon leben, zum Beispiel im Ruhestand."],
+          ["So geht's", "Oben wählen: „Entnahme ausrechnen lassen“ (die Seite sagt, wie viel pro Monat geht) oder „Entnahme selbst festlegen“ (du gibst den Betrag vor). Dann Startkapital, Zeitraum und Anlageart für die Steuer."],
+          ["Was du bekommst", "Wie wahrscheinlich das Geld reicht, was netto im Monat ankommt, die Tabelle „Wie viel darf es sein?“ für 50 bis 99 % Sicherheit, den Kapitalverlauf und eine Tabelle Jahr für Jahr."],
+          ["Gut zu wissen", "Die Entnahme steigt jedes Jahr mit der Inflation. Als Startkapital passt zum Beispiel der Median aus der Vermögensentwicklung."],
+        ] },
+      { mode: "kst", svg: SVG_KST, text: "Was bleibt nach Steuern? Anlageart wählen, Betrag eingeben und die Steuerrechnung Schritt für Schritt sehen.",
+        how: [
+          ["Wofür", "Du willst ETF, Fonds, Aktien oder Krypto verkaufen oder hast Zinsen bekommen und willst wissen, was nach Steuern und Kosten bleibt."],
+          ["So geht's", "Oben die Anlageart wählen, dann Verkaufswert und Einstandswert eintragen. Freibetrag, Verlusttöpfe, Kosten und Kirchensteuer stecken in „Weitere Einstellungen“."],
+          ["Was du bekommst", "Netto-Betrag, Steuer und effektiven Steuersatz, die Steuerrechnung Schritt für Schritt, ein Diagramm zur Aufteilung und wie viel du sparst, wenn du den Verkauf auf mehrere Jahre verteilst."],
+          ["Gut zu wissen", "Gerechnet wird nach deutschem Steuerrecht, Stand 2026. Das ersetzt keine Steuerberatung."],
+        ] },
     ];
-    $("modes").innerHTML = cards.map(c => `<button class="mode" data-mode="${c.mode}">${c.svg}<div><h3>${modeHtml(MODES[c.mode])}</h3><p>${c.text}</p></div>${last[c.mode] ? `<span class="stat">${last[c.mode]}</span>` : ""}</button>`).join("");
+    $("modes").innerHTML = cards.map(c => `<div class="mode-wrap">` +
+      `<button class="mode" data-mode="${c.mode}">${c.svg}<div><h3>${modeHtml(MODES[c.mode])}</h3><p>${c.text}</p></div>${last[c.mode] ? `<span class="stat">${last[c.mode]}</span>` : ""}</button>` +
+      `<details class="how"><summary>So funktioniert's</summary><dl>${c.how.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl></details>` +
+      `</div>`).join("");
   }
   $("modes").addEventListener("click", e => { const b = e.target.closest("[data-mode]"); if (b) location.hash = b.dataset.mode; });
   $("back").addEventListener("click", () => { location.hash = ""; });
