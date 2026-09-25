@@ -67,6 +67,7 @@
   select { width: 100%; font: 600 1.02rem Figtree, system-ui, sans-serif; color: var(--ink); background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
   select:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
   .chart canvas.short { height: 240px; }
+  h3.sub { font-size: 1.05rem; margin: 22px 0 10px; padding-top: 16px; border-top: 1px solid var(--line); }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
   .chip { font: 600 .95rem Figtree, system-ui, sans-serif; color: var(--ink); background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; cursor: pointer; }
   .chip:hover { border-color: var(--acc); }
@@ -221,11 +222,28 @@
         <div><label for="e-infl">Inflation</label><div class="inp"><input id="e-infl" data-kind="pct" inputmode="decimal" value="2"><span>% p. a.</span></div><div class="hint">so stark steigt die Entnahme jedes Jahr</div></div>
         <div><label for="e-vol">Volatilität</label><div class="inp"><input id="e-vol" data-kind="pct" inputmode="decimal" value="8"><span>% p. a.</span></div><div class="hint">Schwankung für die Wahrscheinlichkeiten</div></div>
       </div>
+
+      <h3 class="sub">Steuern auf die Entnahme</h3>
+      <div class="chips" id="e-ttypes" role="radiogroup" aria-label="Anlageart für die Steuer">
+        <button type="button" class="chip" data-ttype="etf" role="radio">Aktien-ETF / Aktienfonds</button>
+        <button type="button" class="chip" data-ttype="misch" role="radio">Mischfonds</button>
+        <button type="button" class="chip" data-ttype="rente" role="radio">Rentenfonds / sonstiger Fonds</button>
+        <button type="button" class="chip" data-ttype="aktie" role="radio">Einzelaktien</button>
+        <button type="button" class="chip" data-ttype="none" role="radio">Keine Steuern</button>
+      </div>
+      <p class="info" id="e-tinfo"></p>
+      <div class="grid" id="e-taxgrid">
+        <div><label for="e-buy">Einstand des Startkapitals</label><div class="inp"><input id="e-buy" data-kind="eur" inputmode="decimal" value="" placeholder="= Startkapital"><span>€</span></div><div class="hint">was du dafür eingezahlt hast; leer = frisch angelegt</div></div>
+        <div><label for="e-fb">Sparerpauschbetrag</label><div class="inp"><input id="e-fb" data-kind="eur" inputmode="decimal" value="1.000"><span>€/Jahr</span></div><div class="hint">2.000 € bei Zusammenveranlagung</div></div>
+      </div>
+
       <details class="more">
         <summary>Erweitert</summary>
         <div class="grid">
           <div><label for="e-n">Anzahl der Simulationen</label><div class="inp"><input id="e-n" data-kind="int" inputmode="numeric" value="10.000"></div></div>
           <div><label for="e-seed">Seed</label><div class="inp"><input id="e-seed" data-kind="int" inputmode="numeric" value="0"></div><div class="hint">0 = jedes Mal neu, sonst wiederholbar</div></div>
+          <div><label for="e-kist">Kirchensteuer</label><select id="e-kist"><option value="0">keine</option><option value="0.08">8 % (Bayern, Baden-Württemberg)</option><option value="0.09">9 % (übrige Länder)</option></select></div>
+          <div><label for="e-pg">Persönlicher Steuersatz (Günstigerprüfung)</label><div class="inp"><input id="e-pg" data-kind="pct" inputmode="decimal" value="" placeholder="leer = aus"><span>%</span></div><div class="hint">liegt er unter 25 %, holt die Steuererklärung die Differenz zurück</div></div>
         </div>
       </details>
       <div class="actions">
@@ -270,7 +288,7 @@
       <h2 class="sec">Plan mit fester Rendite</h2>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Jahr</th><th>Entnahme (Jahr)</th><th>Entnahme (Monat)</th><th>Kapital am Jahresende</th></tr></thead>
+          <thead><tr><th>Jahr</th><th>Monat brutto</th><th>Monat netto</th><th>Kapital am Jahresende</th></tr></thead>
           <tbody id="e-tbody"></tbody>
         </table>
       </div>
@@ -884,6 +902,47 @@
   });
   setEMode(eMode);
 
+  // Steuern auf die Entnahme: Jeder verkaufte Euro enthält Gewinn im Verhältnis 1 − Einstand/Depotwert
+  // (Durchschnittsmethode; bei einmal angelegtem Startkapital gleich FIFO). Die Steuer geht von der Entnahme ab.
+  const TTYPES = {
+    etf: { tf: 0.3, info: "Versteuert wird nur der Gewinnanteil jedes Verkaufs, davon sind 30 % steuerfrei (Teilfreistellung). Die Steuer geht von der Entnahme ab." },
+    misch: { tf: 0.15, info: "Versteuert wird nur der Gewinnanteil jedes Verkaufs, davon sind 15 % steuerfrei (Teilfreistellung). Die Steuer geht von der Entnahme ab." },
+    rente: { tf: 0, info: "Versteuert wird der Gewinnanteil jedes Verkaufs, ohne Teilfreistellung. Die Steuer geht von der Entnahme ab." },
+    aktie: { tf: 0, info: "Versteuert wird der Gewinnanteil jedes Verkaufs, ohne Teilfreistellung. Die Steuer geht von der Entnahme ab." },
+    none: { tf: 0, info: "Ohne Steuern rechnen, z. B. mit NV-Bescheinigung oder bei Krypto nach über einem Jahr Haltedauer." },
+  };
+  let eTType = store.get("finanztool.inputs")["e-ttype"];
+  if (!TTYPES[eTType]) eTType = "etf";
+  function setTType(t) {
+    eTType = t;
+    document.querySelectorAll("#e-ttypes .chip").forEach(b => b.setAttribute("aria-checked", b.dataset.ttype === t));
+    $("e-tinfo").textContent = TTYPES[t].info;
+    $("e-taxgrid").hidden = t === "none";
+    const all = store.get("finanztool.inputs"); all["e-ttype"] = t; store.set("finanztool.inputs", all);
+  }
+  $("e-ttypes").addEventListener("click", e => {
+    const b = e.target.closest("[data-ttype]");
+    if (!b) return;
+    setTType(b.dataset.ttype);
+    if (entResult) $("e-run").click();
+  });
+  setTType(eTType);
+
+  function capTax(gain, tx) {
+    if (!tx || gain <= 0) return 0;
+    const base = Math.max(0, gain * (1 - tx.tf) - tx.fb);
+    const abg = (1 + 0.055 + tx.k) / (4 + tx.k);
+    const rate = tx.pg !== null && tx.pg * (1 + tx.k) < abg ? tx.pg * (1 + tx.k) : abg;
+    return base * rate;
+  }
+  // Ein Jahr Entnahme: Depot wächst auf v, verkauft wird e; liefert Steuer, neuen Einstand, tatsächlich verkauften Betrag
+  function sellYear(v, basis, e, tx) {
+    const sold = Math.min(e, Math.max(0, v));
+    if (!tx || v <= 0) return { tax: 0, basis, sold };
+    const gain = sold * (1 - basis / v);
+    return { tax: capTax(gain, tx), basis: basis - sold * basis / v, sold };
+  }
+
   function mulberry32(a) {
     return function () {
       a |= 0; a = a + 0x6D2B79F5 | 0;
@@ -910,19 +969,23 @@
     const K = new Float64Array((T + 1) * n);   // K[t * n + i], nach Pleite 0
     const sMax = new Float64Array(n), ruin = new Int16Array(n), endK = new Float64Array(n);
     const alive = new Uint32Array(T + 1);
+    const tx = q.tax, taxSum = new Float64Array(n);
     for (let i = 0; i < n; i++) {
-      let k = S, A = S, B = 0, sm = Infinity, ru = 0;
+      let k = S, A = S, B = 0, sm = Infinity, ru = 0, basis = q.buy, ts = 0;
       K[i] = S;
       for (let t = 1; t <= T; t++) {
         const g = Math.exp(mu + vol * gauss()), e = E[t - 1];
         A *= g; B = B * g + e;
         if (B > 0) sm = Math.min(sm, t < T ? A / B : (A - ziel) / B);
-        if (!ru) { k = k * g - e; if (k < -1e-9 * S) { ru = t; k = 0; } }   // Toleranz gegen Rundungsfehler
+        if (!ru) {
+          if (tx) { const s = sellYear(k * g, basis, e, tx); ts += s.tax; basis = s.basis; }
+          k = k * g - e; if (k < -1e-9 * S) { ru = t; k = 0; }   // Toleranz gegen Rundungsfehler
+        }
         K[t * n + i] = k;
         if (!ru) alive[t]++;
       }
       alive[0] = n;
-      sMax[i] = sm; ruin[i] = ru; endK[i] = ru ? 0 : k;
+      sMax[i] = sm; ruin[i] = ru; endK[i] = ru ? 0 : k; taxSum[i] = ts;
     }
     const bands = { p5: [], p25: [], p50: [], p75: [], p95: [] };
     const col = new Float64Array(n);
@@ -940,6 +1003,7 @@
       ruinP: ruinYears.length / n * 100,
       ruinMed: ruinYears.length ? percentileSorted(ruinYears, 50) : null,
       lossP: frac(endK, v => v < S),
+      taxMed: percentileSorted(Float64Array.from(taxSum).sort(), 50),
       halfLeft: frac(endK, v => v >= S / 2),
       ...(() => { const s = Float64Array.from(endK).sort(); return { endMed: percentileSorted(s, 50), endP5: percentileSorted(s, 5), endP95: percentileSorted(s, 95) }; })(),
       safe: q2 => Math.max(0, percentileSorted(sSorted, 100 - q2)) * plan.E0,
@@ -957,6 +1021,14 @@
       return;
     }
     if (q.n * q.T > 5e6) { $("e-status").textContent = "Zu viele Simulationen für diesen Zeitraum – bitte weniger wählen."; return; }
+    q.buy = $("e-buy").value.trim() === "" ? q.S : num("e-buy");
+    const pgRaw = $("e-pg").value.trim();
+    q.tax = eTType === "none" ? null
+      : { tf: TTYPES[eTType].tf, fb: num("e-fb"), k: parseFloat($("e-kist").value), pg: pgRaw === "" ? null : num("e-pg") };
+    if (q.tax && (!(q.buy >= 0) || !(q.tax.fb >= 0) || (q.tax.pg !== null && !(q.tax.pg >= 0 && q.tax.pg < 1)))) {
+      $("e-status").textContent = "Bitte Einstand, Sparerpauschbetrag und Steuersatz prüfen.";
+      return;
+    }
     let plan;
     if (eMode === "fix") {
       const rate = num("e-rate");
@@ -982,13 +1054,33 @@
     const summe = r.reduce((a, x) => a + x.jahr_e, 0);
     const safe90 = sim.safe(90);
     const planEnd = r[T - 1].kapital, emptyYear = (r.find(x => x.kapital < 0) || {}).jahr;
+    // Steuern bei fester Rendite, Jahr für Jahr
+    let V = q.S, Bs = q.buy;
+    const det = r.map(x => {
+      const vb = V * (1 + q.c), s = sellYear(vb, Bs, x.jahr_e, q.tax);
+      Bs = s.basis; V = vb - x.jahr_e;
+      return { sold: s.sold, tax: s.tax, net: s.sold - s.tax };
+    });
+    const detTax = det.reduce((a, x) => a + x.tax, 0), detGross = det.reduce((a, x) => a + x.sold, 0);
+    const netSentence = q.tax
+      ? ` Netto kommen davon im 1. Jahr <b>${eur(det[0].net / 12)}</b> im Monat an` +
+        (det[T - 1].net > 0 ? `, im ${T}. Jahr ${eur(det[T - 1].net / 12)}` : "") + " (bei fester Rendite)."
+      : "";
     $("e-head").innerHTML = `Mit <b>${eur(plan.E0 / 12)}</b> im Monat im 1. Jahr (danach jedes Jahr +${de2.format(q.infl * 100)} %) ` +
-      `geht der Plan in <b>${pctf(sim.success)}</b> der Verläufe auf. Am Ende bleiben im Median <b>${eur(sim.endMed)}</b> übrig, ` +
+      `geht der Plan in <b>${pctf(sim.success)}</b> der Verläufe auf.${netSentence} Am Ende bleiben im Median <b>${eur(sim.endMed)}</b> übrig, ` +
       `in 9 von 10 Verläufen zwischen ${eur(sim.endP5)} und ${eur(sim.endP95)}. Für 90 % Sicherheit wären es ${eur(safe90 / 12)} im Monat.`;
+    const taxTiles = q.tax
+      ? tile("Netto im Monat, 1. Jahr", eur(det[0].net / 12), `brutto ${eur(det[0].sold / 12)}, Steuer ${eur(det[0].tax / 12)}`, { hl: true }) +
+        tile(`Netto im Monat, ${T}. Jahr`, det[T - 1].net > 0 ? eur(det[T - 1].net / 12) : "–",
+          det[T - 1].net > 0 ? `brutto ${eur(det[T - 1].sold / 12)}, Steuer ${eur(det[T - 1].tax / 12)}` : "Geld bei fester Rendite schon aufgebraucht") +
+        tile("Steuern insgesamt", eur(detTax), `bei fester Rendite; im Median der Simulation ${eur(sim.taxMed)}`) +
+        tile("Steuerquote", pctf(detGross > 0 ? detTax / detGross * 100 : 0), "so viel von allen Entnahmen geht an Steuern", { bar: detGross > 0 ? detTax / detGross * 100 : 0, color: "var(--gold)" })
+      : "";
     $("e-metrics").innerHTML =
-      tile("Entnahme im 1. Jahr", eur(plan.E0), `${eur(plan.E0 / 12)} im Monat`, { hl: true }) +
-      tile(`Entnahme im ${T}. Jahr`, eur(r[T - 1].jahr_e), `${eur(r[T - 1].monat_e)} im Monat`) +
-      tile("Summe aller Entnahmen", eur(summe), `über ${T} Jahre`) +
+      tile(q.tax ? "Entnahme im 1. Jahr (brutto)" : "Entnahme im 1. Jahr", eur(plan.E0), `${eur(plan.E0 / 12)} im Monat`, { hl: !q.tax }) +
+      tile(`Entnahme im ${T}. Jahr${q.tax ? " (brutto)" : ""}`, eur(r[T - 1].jahr_e), `${eur(r[T - 1].monat_e)} im Monat`) +
+      tile(q.tax ? "Summe aller Entnahmen (brutto)" : "Summe aller Entnahmen", eur(summe), `über ${T} Jahre`) +
+      taxTiles +
       tile("Endkapital im Median", eur(sim.endMed), "bei schwankender Rendite", { hl: true }) +
       tile("Endkapital P5", eur(sim.endP5), "nur 1 von 20 Verläufen endet darunter") +
       tile("Endkapital P95", eur(sim.endP95), "nur 1 von 20 Verläufen endet darüber") +
@@ -1012,8 +1104,8 @@
     rows.sort((a, b) => b.y - a.y);
     $("e-safe").innerHTML = rows.map(x =>
       `<tr${x.mark ? ' class="mark"' : ""}><td>${x.mark ? pctf(x.l) + " (dein Plan)" : x.l + " % der Verläufe"}</td><td>${eur(x.y / 12)}</td><td>${eur(x.y)}</td></tr>`).join("");
-    $("e-tbody").innerHTML = r.map(x =>
-      `<tr><td>${x.jahr}</td><td>${eur(x.jahr_e)}</td><td>${eur(x.monat_e)}</td><td>${x.kapital >= 0 ? eur(x.kapital) : "aufgebraucht"}</td></tr>`).join("");
+    $("e-tbody").innerHTML = r.map((x, i) =>
+      `<tr><td>${x.jahr}</td><td>${eur(det[i].sold / 12)}</td><td>${eur(det[i].net / 12)}</td><td>${x.kapital >= 0 ? eur(x.kapital) : "aufgebraucht"}</td></tr>`).join("");
     drawFan($("c-ent"), { times: sim.times, bands: sim.bands, plan: [q.S, ...r.map(x => x.kapital)] });
     drawSurvival($("c-surv"), sim.alive, sim.n);
   }
