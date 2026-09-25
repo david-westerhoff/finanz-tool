@@ -65,6 +65,9 @@
   .inp input { flex: 1; min-width: 0; font: 600 1.08rem Figtree, system-ui, sans-serif; color: var(--ink); background: none; border: 0; padding: 10px 12px; outline: none; font-variant-numeric: tabular-nums; }
   .inp span { color: var(--muted); padding-right: 12px; font-weight: 600; }
   .hint { font-size: .84rem; color: var(--muted); margin-top: 5px; }
+  .inp.bad { border-color: var(--red); }
+  .err { font-size: .86rem; color: var(--red); margin-top: 5px; font-weight: 600; }
+  .status.bad { color: var(--red); font-weight: 600; }
   select { width: 100%; font: 600 1.02rem Figtree, system-ui, sans-serif; color: var(--ink); background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
   select:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
   .chart canvas.short { height: 240px; }
@@ -482,18 +485,81 @@
   const $ = id => document.getElementById(id);
 
   // Eingaben: Beträge mit Tausenderpunkt, Prozente als ganze Zahlen
+  // Streng einlesen: „12abc“ oder „1e9“ sind keine Zahl. „1.000,50“ = Tausenderpunkte, „10.5“ oder „10,5“ = Dezimalzahl.
   function num(id) {
     const el = $(id), k = el.dataset.kind;
     let s = el.value.replace(/[\s€%]/g, "");
-    s = k === "pct" ? s.replace(",", ".") : s.replace(/\./g, "").replace(",", ".");
-    const v = parseFloat(s);
+    if (k === "pct") s = s.replace(",", ".");
+    else if (/^-?\d{1,3}(\.\d{3})+(,\d*)?$/.test(s)) s = s.replace(/\./g, "").replace(",", ".");
+    else s = s.replace(",", ".");
+    const v = /^-?(\d+\.?\d*|\.\d+)$/.test(s) ? parseFloat(s) : NaN;
     return k === "pct" ? v / 100 : v;
+  }
+
+  // ---------- Eingaben prüfen ----------
+  // Grenzen in der Einheit, die man sieht (Prozent als Prozent). opt = darf leer bleiben, gt = muss größer sein
+  const RULES = {
+    "mc-init": { min: 0, max: 1e9 }, "mc-rate": { min: 0, max: 1e7 }, "mc-years": { min: 1, max: 100, int: true },
+    "mc-cagr": { min: -50, max: 50 }, "mc-vol": { min: 0, max: 100 }, "mc-infl": { min: -5, max: 20 },
+    "mc-n": { min: 100, max: 200000, int: true }, "mc-steps": { min: 1, max: 365, int: true }, "mc-seed": { min: 0, max: 1e6, int: true },
+    "e-start": { gt: 0, max: 1e10 }, "e-rate": { gt: 0, max: 1e7 }, "e-ziel": { min: 0, max: 1e10 },
+    "e-years": { min: 1, max: 100, int: true }, "e-cagr": { min: -50, max: 50 }, "e-infl": { min: -5, max: 20 },
+    "e-vol": { min: 0, max: 100 }, "e-buy": { min: 0, max: 1e10, opt: true }, "e-fb": { min: 0, max: 1e6 },
+    "e-n": { min: 100, max: 200000, int: true }, "e-seed": { min: 0, max: 1e6, int: true }, "e-pg": { min: 0, max: 45, opt: true },
+    "k-value": { gt: 0, max: 1e10 }, "k-buy": { min: 0, max: 1e10 }, "k-zins": { min: 0, max: 1e9 },
+    "k-prate": { min: 0, max: 45 }, "k-fb": { min: 0, max: 1e6 }, "k-fbused": { min: 0, max: 1e6 },
+    "k-vt": { min: 0, max: 1e10 }, "k-vta": { min: 0, max: 1e10 }, "k-vp": { min: 0, max: 1e10 },
+    "k-vkp": { min: 0, max: 50 }, "k-vke": { min: 0, max: 1e9 }, "k-split": { min: 1, max: 10, int: true }, "k-pg": { min: 0, max: 45, opt: true },
+  };
+  const fmtLim = (v, k) => k === "pct" ? de2.format(v) + " %" : k === "eur" ? eur(v) : de0.format(v);
+  function fieldError(el) {
+    const r = RULES[el.id], k = el.dataset.kind;
+    if (!r) return "";
+    if (el.value.trim() === "") return r.opt ? "" : "Bitte eine Zahl eintragen.";
+    let v = num(el.id);
+    if (!isFinite(v)) return "Das ist keine Zahl. Erlaubt sind z. B. 1.000 oder 2,5.";
+    if (k === "pct") v *= 100;
+    if (r.int && Math.abs(v - Math.round(v)) > 1e-9) return "Bitte eine ganze Zahl eintragen.";
+    if (r.gt !== undefined && !(v > r.gt)) return `Muss größer als ${fmtLim(r.gt, k)} sein.`;
+    if (r.min !== undefined && v < r.min) return `Mindestens ${fmtLim(r.min, k)}.`;
+    if (r.max !== undefined && v > r.max) return `Höchstens ${fmtLim(r.max, k)}.`;
+    return "";
+  }
+  function markField(el, msg) {
+    const box = el.closest(".inp"), wrap = box.parentElement;
+    let err = wrap.querySelector(".err");
+    box.classList.toggle("bad", !!msg);
+    el.setAttribute("aria-invalid", msg ? "true" : "false");
+    if (!msg) { if (err) err.remove(); return; }
+    if (!err) { err = document.createElement("div"); err.className = "err"; err.setAttribute("role", "alert"); box.after(err); }
+    err.textContent = msg;
+  }
+  // Prüft alle sichtbaren Felder eines Rechners; extra = zusätzliche Prüfungen über mehrere Felder
+  const VIEWS = { mc: "view-mc", e: "view-ent", k: "view-kst" };
+  function check(p, extra) {
+    const bad = [];
+    document.querySelectorAll(`#${VIEWS[p]} .inp input`).forEach(el => {
+      const msg = el.closest("[hidden]") ? "" : fieldError(el);
+      markField(el, msg);
+      if (msg) bad.push(el);
+    });
+    if (!bad.length && extra) for (const [id, msg] of extra()) { markField($(id), msg); bad.push($(id)); }
+    const st = $(p + "-status");
+    st.classList.toggle("bad", bad.length > 0);
+    if (!bad.length) return true;
+    const names = [...new Set(bad.map(el => document.querySelector(`label[for="${el.id}"]`).textContent))];
+    st.textContent = `Bitte ${names.length > 1 ? "diese Felder" : "dieses Feld"} prüfen: ${names.join(", ")}.`;
+    $(p === "mc" ? "mc-results" : p === "e" ? "e-results" : "k-results").hidden = true;
+    const d = bad[0].closest("details"); if (d) d.open = true;
+    const r = bad[0].getBoundingClientRect();
+    if (r.top < 0 || r.bottom > innerHeight) bad[0].scrollIntoView({ block: "center", behavior: "smooth" });
+    return false;
   }
   function pretty(el) {
     if (el.dataset.kind === "text") return;
     const v = num(el.id);
     if (!isFinite(v)) return;
-    el.value = el.dataset.kind === "pct" ? de2.format(v * 100) : de0.format(v);
+    el.value = el.dataset.kind === "pct" ? de2.format(v * 100) : el.dataset.kind === "eur" ? de2.format(v) : de0.format(v);
   }
 
   // ---------- Merken (nur auf diesem Gerät) ----------
@@ -509,6 +575,7 @@
     if (el.tagName === "SELECT" && el.selectedIndex < 0) el.selectedIndex = 0;
     el.addEventListener(el.tagName === "SELECT" ? "change" : "blur", () => {
       pretty(el);
+      if (RULES[el.id]) markField(el, fieldError(el));
       const all = store.get("finanztool.inputs"), changed = all[el.id] !== el.value;
       all[el.id] = el.value; store.set("finanztool.inputs", all);
       // Steht schon ein Ergebnis da, sofort neu rechnen, damit es nicht zu alten Eingaben passt
@@ -738,6 +805,8 @@
   let workers = [], mcResult = null;
 
   $("mc-run").addEventListener("click", () => {
+    if (!check("mc", () => num("mc-init") === 0 && num("mc-rate") === 0
+      ? [["mc-init", "Anfangsinvestition oder Sparrate muss größer als 0 € sein."]] : [])) return;
     const p = {
       init: num("mc-init"), cagr: num("mc-cagr"), vol: num("mc-vol"),
       years: Math.round(num("mc-years")), rate: num("mc-rate"), infl: num("mc-infl"),
@@ -1044,6 +1113,7 @@
 
   let entResult = null;
   $("e-run").addEventListener("click", () => {
+    if (!check("e")) return;
     const q = {
       S: num("e-start"), ziel: num("e-ziel"), c: num("e-cagr"), infl: num("e-infl"),
       T: Math.round(num("e-years")), vol: num("e-vol"), n: Math.round(num("e-n")), seed: Math.round(num("e-seed")) || 0,
@@ -1068,7 +1138,10 @@
       plan = entnahmeplanFest(q.S, rate * 12, q.c, q.infl, q.T);
     } else plan = entnahmeplanNominal(q.S, q.ziel, q.c, q.infl, q.T);
     if (!(plan.E0 > 0)) {
-      $("e-status").textContent = "Mit dieser Rendite erreicht das Startkapital den Zielendwert nicht einmal ohne Entnahmen.";
+      const most = q.S * (1 + q.c) ** q.T;
+      markField($("e-ziel"), `Zu hoch: Ohne jede Entnahme wächst das Startkapital bei dieser Rendite nur auf etwa ${eur(most)}.`);
+      $("e-status").textContent = "Bitte dieses Feld prüfen: " + $("e-ziel-l").textContent + ".";
+      $("e-status").classList.add("bad");
       $("e-results").hidden = true;
       return;
     }
@@ -1239,6 +1312,11 @@
 
   let kstResult = null;
   $("k-run").addEventListener("click", () => {
+    if (!check("k", () => {
+      if (TYPES[kType].zins) return [];
+      const v = num("k-value"), cost = v * num("k-vkp") + num("k-vke");
+      return cost >= v ? [["k-vke", "Die Verkaufskosten sind so hoch wie der Verkaufswert oder höher."]] : [];
+    })) return;
     const pgRaw = $("k-pg").value.trim();
     const s = {
       type: kType, value: num("k-value"), buy: num("k-buy"), zins: num("k-zins"),
