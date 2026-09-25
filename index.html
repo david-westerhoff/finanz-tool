@@ -505,12 +505,20 @@
     if (el.tagName === "SELECT" && el.selectedIndex < 0) el.selectedIndex = 0;
     el.addEventListener(el.tagName === "SELECT" ? "change" : "blur", () => {
       pretty(el);
-      const all = store.get("finanztool.inputs"); all[el.id] = el.value; store.set("finanztool.inputs", all);
+      const all = store.get("finanztool.inputs"), changed = all[el.id] !== el.value;
+      all[el.id] = el.value; store.set("finanztool.inputs", all);
+      // Steht schon ein Ergebnis da, sofort neu rechnen, damit es nicht zu alten Eingaben passt
+      if (changed && hasResult(el.id.split("-")[0])) $(RUN[el.id.split("-")[0]]).click();
     });
     el.addEventListener("keydown", e => {
-      if (e.key === "Enter") { pretty(el); $(RUN[el.id.split("-")[0]]).click(); }
+      if (e.key === "Enter") {
+        pretty(el);
+        const all = store.get("finanztool.inputs"); all[el.id] = el.value; store.set("finanztool.inputs", all);
+        $(RUN[el.id.split("-")[0]]).click();
+      }
     });
   });
+  function hasResult(p) { return p === "mc" ? !!mcResult : p === "e" ? !!entResult : p === "k" ? !!kstResult : false; }
   function remember(mode, text) { const l = store.get("finanztool.last"); l[mode] = text; store.set("finanztool.last", l); }
 
   // ---------- Menü ----------
