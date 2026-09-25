@@ -37,7 +37,6 @@
   h1 { font-family: Unbounded, Figtree, sans-serif; font-size: 1.4rem; margin: 0; letter-spacing: .01em; }
   h1 span { color: var(--acc); }
   .mode-name { font-family: Figtree, sans-serif; color: var(--muted); font-weight: 700; margin-left: 10px; font-size: 1.05rem; }
-  @media (max-width: 600px) { .mode-name { display: block; margin: 4px 0 0; } }
   button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
 
   .btn { font: inherit; font-weight: 700; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); color: var(--ink); padding: 9px 16px; cursor: pointer; }
@@ -135,6 +134,13 @@
 
   footer { color: var(--muted); font-size: .85rem; margin-top: 44px; line-height: 1.6; max-width: 80ch; }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  @media (max-width: 600px) {
+    .mode-name { display: block; margin: 4px 0 0; }
+    /* Tabellen ohne Wischen: engere Spalten, „pro Jahr“ ausblenden */
+    th, td { padding: 8px 8px; font-size: .9rem; }
+    th { white-space: normal; }
+    #t-safe th:nth-child(3), #t-safe td:nth-child(3) { display: none; }
+  }
 </style>
 </head>
 <body>
@@ -157,7 +163,6 @@
         <div><label for="mc-years">Anlagehorizont</label><div class="inp"><input id="mc-years" data-kind="int" inputmode="numeric" value="25"><span>Jahre</span></div></div>
         <div><label for="mc-cagr">Erwartete Rendite</label><div class="inp"><input id="mc-cagr" data-kind="pct" inputmode="decimal" value="8"><span>% p. a.</span></div><div class="hint">jährliche Rendite im Median (CAGR)</div></div>
         <div><label for="mc-vol">Volatilität</label><div class="inp"><input id="mc-vol" data-kind="pct" inputmode="decimal" value="15"><span>% p. a.</span></div><div class="hint">wie stark der Wert pro Jahr schwankt</div></div>
-        <div><label for="mc-target">Zielbetrag</label><div class="inp"><input id="mc-target" data-kind="eur" inputmode="decimal" value="50.000"><span>€</span></div><div class="hint">für die Ziel-Wahrscheinlichkeit</div></div>
       </div>
       <details class="more">
         <summary>Erweitert</summary>
@@ -176,10 +181,7 @@
 
     <div id="mc-results" hidden>
       <p class="headline" id="mc-head"></p>
-      <h2 class="sec">Kennzahlen</h2>
-      <div class="tiles" id="mc-metrics"></div>
-      <h2 class="sec">Wahrscheinlichkeiten</h2>
-      <div class="tiles" id="mc-probs"></div>
+      <div class="tiles" id="mc-top"></div>
       <div class="charts">
         <figure class="chart">
           <figcaption>Wertentwicklung (logarithmisch)</figcaption>
@@ -203,6 +205,8 @@
           </div>
         </figure>
       </div>
+      <h2 class="sec">Weitere Kennzahlen</h2>
+      <div class="tiles" id="mc-more"></div>
     </div>
   </section>
 
@@ -256,13 +260,10 @@
 
     <div id="e-results" hidden>
       <p class="headline" id="e-head"></p>
-      <h2 class="sec">Kennzahlen</h2>
-      <div class="tiles" id="e-metrics"></div>
-      <h2 class="sec">Wahrscheinlichkeiten</h2>
-      <div class="tiles" id="e-probs"></div>
+      <div class="tiles" id="e-top"></div>
       <h2 class="sec">Wie viel darf es sein?</h2>
       <div class="table-wrap" style="max-height:none">
-        <table>
+        <table id="t-safe">
           <thead><tr><th>Plan geht auf in</th><th>pro Monat (1. Jahr)</th><th>pro Jahr (1. Jahr)</th></tr></thead>
           <tbody id="e-safe"></tbody>
         </table>
@@ -287,6 +288,8 @@
           </div>
         </figure>
       </div>
+      <h2 class="sec">Weitere Kennzahlen</h2>
+      <div class="tiles" id="e-more"></div>
       <h2 class="sec">Plan mit fester Rendite</h2>
       <div class="table-wrap">
         <table>
@@ -375,7 +378,7 @@
 
   <footer>
     Alle Berechnungen laufen in deinem Browser; Eingaben werden nur auf diesem Gerät gemerkt und nicht übertragen.
-    Das Modell nimmt lognormal verteilte Renditen an und berücksichtigt keine Kosten und Steuern.
+    Das Modell nimmt lognormal verteilte Renditen an und berücksichtigt keine laufenden Kosten; Steuern nur im Entnahmeplan und bei Steuern &amp; Kosten.
     Keine Anlageberatung.
   </footer>
 </div>
@@ -393,7 +396,7 @@
     };
   }
   onmessage = e => {
-    const { init, cagr, vol, years, rate, n, steps, seed, target } = e.data;
+    const { init, cagr, vol, years, rate, n, steps, seed } = e.data;
     const rnd = mulberry32(seed > 0 ? seed : (Math.random() * 2 ** 32) >>> 0);
 
     const totalSteps = years * steps;
@@ -410,9 +413,7 @@
     const R = recSteps.length;
     const rec = new Float32Array(R * n);       // rec[k * n + i]
     const finals = new Float64Array(n);
-    const hit = new Float32Array(n);           // erstes Erreichen des Ziels in Jahren, -1 = nie
     const dd = new Float32Array(n);            // größter Einbruch vom Höchststand
-    const below = new Uint8Array(n);           // zwischendurch unter dem Eingezahlten
 
     const nSample = Math.min(e.data.nSample, n);
     const sample = new Set();
@@ -434,20 +435,16 @@
     const progEvery = Math.max(1, Math.floor(n / 50));
     for (let i = 0; i < n; i++) {
       fillNormals();
-      let v = init, peak = init, mdd = 0, h = init >= target ? 0 : -1, b = 0;
+      let v = init, peak = init, mdd = 0;
       rec[i] = v;
       for (let t = 1; t <= totalSteps; t++) {
         v = v * Math.exp(drift + diffusion * z[t - 1]) + contrib;
         if (v > peak) peak = v; else if (peak > 0) { const d = 1 - v / peak; if (d > mdd) mdd = d; }
-        if (h < 0 && v >= target) h = t;
-        if (!b && v < init + contrib * t) b = 1;
         const k = recAt[t];
         if (k > 0) rec[k * n + i] = v;
       }
       finals[i] = v;
-      hit[i] = h < 0 ? -1 : h / steps;
       dd[i] = mdd;
-      below[i] = b;
       if (sample.has(i)) {
         const p = new Float32Array(R);
         for (let j = 0; j < R; j++) p[j] = rec[j * n + i];
@@ -456,8 +453,8 @@
       if (i % progEvery === 0) postMessage({ type: "progress", done: i });
     }
 
-    postMessage({ type: "done", n, R, recSteps, rec, finals, hit, dd, below, samplePaths },
-      [rec.buffer, finals.buffer, hit.buffer, dd.buffer, below.buffer, ...samplePaths.map(p => p.buffer)]);
+    postMessage({ type: "done", n, R, recSteps, rec, finals, dd, samplePaths },
+      [rec.buffer, finals.buffer, dd.buffer, ...samplePaths.map(p => p.buffer)]);
   };
 </script>
 
@@ -741,14 +738,13 @@
   $("mc-run").addEventListener("click", () => {
     const p = {
       init: num("mc-init"), cagr: num("mc-cagr"), vol: num("mc-vol"),
-      years: Math.round(num("mc-years")), rate: num("mc-rate"), target: num("mc-target"),
+      years: Math.round(num("mc-years")), rate: num("mc-rate"),
       n: Math.round(num("mc-n")), steps: Math.round(num("mc-steps")), seed: Math.round(num("mc-seed")) || 0,
     };
     if ([p.init, p.cagr, p.vol, p.years, p.rate, p.n, p.steps].some(v => !isFinite(v)) || p.years < 1 || p.n < 100 || p.steps < 1) {
       $("mc-status").textContent = "Bitte alle Felder mit gültigen Zahlen füllen (mindestens 1 Jahr, 100 Simulationen, 1 Zeitschritt).";
       return;
     }
-    if (!isFinite(p.target)) p.target = 0;
     if (p.n * p.years * p.steps > 4e8) {
       $("mc-status").textContent = "Das sind zu viele Rechenschritte für den Browser – weniger Simulationen oder Zeitschritte wählen.";
       return;
@@ -800,9 +796,9 @@
   // Teilergebnisse zusammenführen, Perzentile und Wahrscheinlichkeiten berechnen
   function combine(parts, p) {
     const R = parts[0].R, n = p.n;
-    const finals = new Float64Array(n), hit = new Float64Array(n), dd = new Float64Array(n), below = new Uint8Array(n);
+    const finals = new Float64Array(n), dd = new Float64Array(n);
     let off = 0;
-    for (const d of parts) { finals.set(d.finals, off); hit.set(d.hit, off); dd.set(d.dd, off); below.set(d.below, off); off += d.n; }
+    for (const d of parts) { finals.set(d.finals, off); dd.set(d.dd, off); off += d.n; }
 
     const bands = { p5: new Float64Array(R), p25: new Float64Array(R), p50: new Float64Array(R), p75: new Float64Array(R), p95: new Float64Array(R) };
     const col = new Float64Array(n);
@@ -816,7 +812,6 @@
     const sorted = Float64Array.from(finals).sort();
     const pct = {};
     for (const q of [5, 25, 50, 75, 95, 99]) pct[q] = percentileSorted(sorted, q);
-    const hitSorted = Float64Array.from(hit, v => v < 0 ? Infinity : v).sort();
     const ddSorted = Float64Array.from(dd).sort();
 
     const invested = p.init + p.rate * 12 * p.years;
@@ -824,14 +819,11 @@
       p, times: parts[0].recSteps.map(t => t / p.steps),
       bands, finals, pct, invested,
       samplePaths: parts.flatMap(d => d.samplePaths),
-      hitMed: hitSorted[Math.floor((n - 1) / 2)],
       ddMed: percentileSorted(ddSorted, 50),
       probs: {
         loss: frac(finals, v => v < invested),
-        below: frac(below, v => v === 1),
         dbl: frac(finals, v => v >= 2 * invested),
         ten: frac(finals, v => v >= 10 * invested),
-        target: frac(finals, v => v >= p.target),
         dd30: frac(dd, v => v >= 0.3),
         dd50: frac(dd, v => v >= 0.5),
       },
@@ -844,28 +836,22 @@
     const { p, pct, probs } = r;
     $("mc-head").innerHTML = `Nach ${p.years} Jahren liegt das Depot im Median bei <b>${eur(pct[50])}</b>, eingezahlt sind ${eur(r.invested)}. ` +
       `9 von 10 Verläufen enden zwischen ${eur(pct[5])} und ${eur(pct[95])}.`;
-    $("mc-metrics").innerHTML =
+    const red = "var(--red)";
+    // Oben nur das Wichtigste, der Rest steht unter den Grafiken
+    $("mc-top").innerHTML =
       tile("Median", eur(pct[50]), "die Hälfte der Verläufe endet darüber", { hl: true }) +
+      tile("Eingezahlt", eur(r.invested), p.rate > 0 ? `${eur(p.init)} + ${eur(p.rate)} im Monat` : "nur die Anfangsinvestition") +
+      tile("Verlust", pctf(probs.loss), "am Ende weniger als eingezahlt", { bar: probs.loss, color: red }) +
+      tile("Verdopplung", pctf(probs.dbl), "am Ende mindestens das Doppelte des Eingezahlten", { bar: probs.dbl });
+    $("mc-more").innerHTML =
       tile("P5", eur(pct[5]), "nur 1 von 20 Verläufen endet darunter") +
       tile("P25", eur(pct[25]), "1 von 4 Verläufen endet darunter") +
       tile("P75", eur(pct[75]), "1 von 4 Verläufen endet darüber") +
       tile("P95", eur(pct[95]), "nur 1 von 20 Verläufen endet darüber") +
-      tile("Eingezahlt", eur(r.invested), p.rate > 0 ? `${eur(p.init)} + ${eur(p.rate)} im Monat` : "nur die Anfangsinvestition") +
-      tile("Größter Einbruch", "−" + de0.format(r.ddMed * 100) + " %", "im Median, gemessen vom bisherigen Höchststand");
-    const red = "var(--red)", gold = "var(--gold)";
-    let probs2 =
-      tile("Verlust", pctf(probs.loss), "am Ende weniger als eingezahlt", { bar: probs.loss, color: red }) +
-      tile("Zwischendurch im Minus", pctf(probs.below), "irgendwann unter dem bis dahin Eingezahlten", { bar: probs.below, color: gold }) +
-      tile("Verdopplung", pctf(probs.dbl), "am Ende mindestens das Doppelte des Eingezahlten", { bar: probs.dbl }) +
-      tile("Verzehnfachung", pctf(probs.ten), "am Ende mindestens das Zehnfache", { bar: probs.ten });
-    if (p.target > 0) probs2 +=
-      tile(`Ziel ${eur(p.target)}`, pctf(probs.target), "am Ende erreicht", { bar: probs.target }) +
-      tile("Ziel zum ersten Mal erreicht", isFinite(r.hitMed) ? `nach ${de1.format(r.hitMed)} J.` : "–",
-        isFinite(r.hitMed) ? "im Median, auch wenn es danach wieder fällt" : "in weniger als der Hälfte der Verläufe");
-    probs2 +=
+      tile("Verzehnfachung", pctf(probs.ten), "am Ende mindestens das Zehnfache", { bar: probs.ten }) +
+      tile("Größter Einbruch", "−" + de0.format(r.ddMed * 100) + " %", "im Median, gemessen vom bisherigen Höchststand") +
       tile("Einbruch ab 30 %", pctf(probs.dd30), "irgendwann 30 % unter dem Höchststand", { bar: probs.dd30, color: red }) +
       tile("Einbruch ab 50 %", pctf(probs.dd50), "irgendwann halbiert gegenüber dem Höchststand", { bar: probs.dd50, color: red });
-    $("mc-probs").innerHTML = probs2;
     drawFan($("c-paths"), { times: r.times, bands: r.bands, samples: r.samplePaths, log: true });
     drawHist($("c-hist"), r);
   }
@@ -1019,7 +1005,6 @@
       ruinMed: ruinYears.length ? percentileSorted(ruinYears, 50) : null,
       lossP: frac(endK, v => v < S),
       taxMed: percentileSorted(Float64Array.from(taxSum).sort(), 50),
-      halfLeft: frac(endK, v => v >= S / 2),
       ...(() => { const s = Float64Array.from(endK).sort(); return { endMed: percentileSorted(s, 50), endP5: percentileSorted(s, 5), endP95: percentileSorted(s, 95) }; })(),
       safe: q2 => Math.max(0, percentileSorted(sSorted, 100 - q2)) * plan.E0,
     };
@@ -1068,7 +1053,6 @@
     const { q, plan, sim } = entResult, r = plan.rows, T = q.T;
     const summe = r.reduce((a, x) => a + x.jahr_e, 0);
     const safe90 = sim.safe(90);
-    const planEnd = r[T - 1].kapital, emptyYear = (r.find(x => x.kapital < 0) || {}).jahr;
     // Steuern bei fester Rendite, Jahr für Jahr
     let V = q.S, Bs = q.buy;
     const det = r.map(x => {
@@ -1084,35 +1068,33 @@
     $("e-head").innerHTML = `Mit <b>${eur(plan.E0 / 12)}</b> im Monat im 1. Jahr (danach jedes Jahr +${de2.format(q.infl * 100)} %) ` +
       `geht der Plan in <b>${pctf(sim.success)}</b> der Verläufe auf.${netSentence} Am Ende bleiben im Median <b>${eur(sim.endMed)}</b> übrig, ` +
       `in 9 von 10 Verläufen zwischen ${eur(sim.endP5)} und ${eur(sim.endP95)}. Für 90 % Sicherheit wären es ${eur(safe90 / 12)} im Monat.`;
-    const taxTiles = q.tax
-      ? tile("Netto im Monat, 1. Jahr", eur(det[0].net / 12), `brutto ${eur(det[0].sold / 12)}, Steuer ${eur(det[0].tax / 12)}`, { hl: true }) +
-        tile(`Netto im Monat, ${T}. Jahr`, det[T - 1].net > 0 ? eur(det[T - 1].net / 12) : "–",
-          det[T - 1].net > 0 ? `brutto ${eur(det[T - 1].sold / 12)}, Steuer ${eur(det[T - 1].tax / 12)}` : "Geld bei fester Rendite schon aufgebraucht") +
-        tile("Steuern insgesamt", eur(detTax), `bei fester Rendite; im Median der Simulation ${eur(sim.taxMed)}`) +
-        tile("Steuerquote", pctf(detGross > 0 ? detTax / detGross * 100 : 0), "so viel von allen Entnahmen geht an Steuern", { bar: detGross > 0 ? detTax / detGross * 100 : 0, color: "var(--gold)" })
-      : "";
-    $("e-metrics").innerHTML =
-      tile(q.tax ? "Entnahme im 1. Jahr (brutto)" : "Entnahme im 1. Jahr", eur(plan.E0), `${eur(plan.E0 / 12)} im Monat`, { hl: !q.tax }) +
-      tile(`Entnahme im ${T}. Jahr${q.tax ? " (brutto)" : ""}`, eur(r[T - 1].jahr_e), `${eur(r[T - 1].monat_e)} im Monat`) +
-      tile(q.tax ? "Summe aller Entnahmen (brutto)" : "Summe aller Entnahmen", eur(summe), `über ${T} Jahre`) +
-      taxTiles +
-      tile("Endkapital im Median", eur(sim.endMed), "bei schwankender Rendite", { hl: true }) +
-      tile("Endkapital P5", eur(sim.endP5), "nur 1 von 20 Verläufen endet darunter") +
-      tile("Endkapital P95", eur(sim.endP95), "nur 1 von 20 Verläufen endet darüber") +
-      tile("Endkapital mit fester Rendite", planEnd >= 0 ? eur(planEnd) : "aufgebraucht",
-        planEnd >= 0 ? `wenn jedes Jahr genau ${pctf(q.c * 100)} kommen` : `schon in Jahr ${emptyYear}, bei genau ${pctf(q.c * 100)} Rendite`);
     const red = "var(--red)";
-    let pr =
-      tile("Plan geht auf", pctf(sim.success), q.ziel > 0 ? `Geld reicht ${T} Jahre, am Ende bleiben mindestens ${eur(q.ziel)}` : `Geld reicht alle ${T} Jahre`, { bar: sim.success }) +
+    // Oben nur das Wichtigste, der Rest steht unter den Grafiken
+    $("e-top").innerHTML =
+      tile("Plan geht auf", pctf(sim.success), q.ziel > 0 ? `Geld reicht ${T} Jahre, am Ende bleiben mindestens ${eur(q.ziel)}` : `Geld reicht alle ${T} Jahre`, { bar: sim.success, hl: true }) +
+      (q.tax
+        ? tile("Netto im Monat, 1. Jahr", eur(det[0].net / 12), `brutto ${eur(det[0].sold / 12)}, Steuer ${eur(det[0].tax / 12)}`)
+        : tile("Entnahme im Monat, 1. Jahr", eur(plan.E0 / 12), `${eur(plan.E0)} im Jahr`)) +
+      tile("Endkapital im Median", eur(sim.endMed), "bei schwankender Rendite") +
       tile("Geld geht vorher aus", pctf(sim.ruinP), sim.ruinMed ? `wenn ja, im Median in Jahr ${de0.format(sim.ruinMed)}` : "in keinem Verlauf", { bar: sim.ruinP, color: red });
+    let more = "";
     if (q.ziel > 0) {
       const miss = Math.max(0, 100 - sim.success - sim.ruinP);
-      pr += tile("Ziel verfehlt", pctf(miss), "Geld reicht, aber am Ende bleibt weniger als das Ziel", { bar: miss, color: "var(--gold)" });
+      more += tile("Ziel verfehlt", pctf(miss), "Geld reicht, aber am Ende bleibt weniger als das Ziel", { bar: miss, color: "var(--gold)" });
     }
-    pr +=
+    more +=
       tile("Verlust", pctf(sim.lossP), `am Ende weniger als die ${eur(q.S)} vom Anfang übrig`, { bar: sim.lossP, color: red }) +
-      tile("Mindestens die Hälfte übrig", pctf(sim.halfLeft), `am Ende über ${eur(q.S / 2)}`, { bar: sim.halfLeft });
-    $("e-probs").innerHTML = pr;
+      tile("Endkapital P5", eur(sim.endP5), "nur 1 von 20 Verläufen endet darunter") +
+      tile("Endkapital P95", eur(sim.endP95), "nur 1 von 20 Verläufen endet darüber") +
+      (q.tax ? tile("Entnahme im 1. Jahr (brutto)", eur(plan.E0), `${eur(plan.E0 / 12)} im Monat`) : "") +
+      tile(`Entnahme im ${T}. Jahr${q.tax ? " (brutto)" : ""}`, eur(r[T - 1].jahr_e), `${eur(r[T - 1].monat_e)} im Monat`) +
+      tile(q.tax ? "Summe aller Entnahmen (brutto)" : "Summe aller Entnahmen", eur(summe), `über ${T} Jahre`);
+    if (q.tax) more +=
+      tile(`Netto im Monat, ${T}. Jahr`, det[T - 1].net > 0 ? eur(det[T - 1].net / 12) : "–",
+        det[T - 1].net > 0 ? `brutto ${eur(det[T - 1].sold / 12)}, Steuer ${eur(det[T - 1].tax / 12)}` : "Geld bei fester Rendite schon aufgebraucht") +
+      tile("Steuern insgesamt", eur(detTax), `bei fester Rendite; im Median der Simulation ${eur(sim.taxMed)}`) +
+      tile("Steuerquote", pctf(detGross > 0 ? detTax / detGross * 100 : 0), "so viel von allen Entnahmen geht an Steuern", { bar: detGross > 0 ? detTax / detGross * 100 : 0, color: "var(--gold)" });
+    $("e-more").innerHTML = more;
     const levels = [50, 75, 90, 95, 99];
     const rows = levels.map(l => ({ l, y: sim.safe(l) }));
     rows.push({ l: sim.success, y: plan.E0, mark: true });
