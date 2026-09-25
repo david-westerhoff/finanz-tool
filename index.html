@@ -46,7 +46,7 @@
   .btn:disabled { opacity: .55; cursor: wait; }
 
   /* Menü */
-  .modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .modes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
   @media (max-width: 720px) { .modes { grid-template-columns: 1fr; } .mode { grid-template-columns: 130px 1fr; align-items: center; } .mode svg { height: 110px; } .mode .stat { grid-column: 1 / -1; } }
   .mode { text-align: left; font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 16px; cursor: pointer; display: grid; gap: 12px; transition: transform .15s, border-color .15s; }
   .mode:hover { transform: translateY(-3px); border-color: var(--acc); }
@@ -64,6 +64,19 @@
   .inp input { flex: 1; min-width: 0; font: 600 1.08rem Figtree, system-ui, sans-serif; color: var(--ink); background: none; border: 0; padding: 10px 12px; outline: none; font-variant-numeric: tabular-nums; }
   .inp span { color: var(--muted); padding-right: 12px; font-weight: 600; }
   .hint { font-size: .84rem; color: var(--muted); margin-top: 5px; }
+  select { width: 100%; font: 600 1.02rem Figtree, system-ui, sans-serif; color: var(--ink); background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  select:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+  .prods { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 18px; }
+  @media (max-width: 760px) { .prods { grid-template-columns: 1fr; } }
+  .prod { border: 1px solid var(--line); border-radius: 14px; padding: 14px; background: rgba(255,255,255,.015); }
+  .prod-h { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .prod-h > i { width: 14px; height: 14px; border-radius: 4px; flex: none; }
+  .prod-h .inp { flex: 1; }
+  .prod .grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px 14px; }
+  h3.sub { font-size: 1rem; margin: 20px 0 10px; }
+  .chart canvas.short { height: 230px; }
+  td.minus { color: var(--muted); }
+  tr.sum td { font-weight: 700; border-top: 2px solid var(--line); }
   details.more { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px; }
   details.more summary { cursor: pointer; color: var(--muted); font-weight: 600; }
   details.more .grid { margin-top: 12px; }
@@ -248,6 +261,90 @@
     </div>
   </section>
 
+  <!-- ================= KOSTEN & STEUERN ================= -->
+  <section id="view-kst" hidden>
+    <div class="inputs">
+      <div class="grid">
+        <div><label for="k-init">Anfangsbetrag</label><div class="inp"><input id="k-init" data-kind="eur" inputmode="decimal" value="10.000"><span>€</span></div></div>
+        <div><label for="k-rate">Monatliche Sparrate</label><div class="inp"><input id="k-rate" data-kind="eur" inputmode="decimal" value="100"><span>€</span></div></div>
+        <div><label for="k-years">Anlagedauer</label><div class="inp"><input id="k-years" data-kind="int" inputmode="numeric" value="25"><span>Jahre</span></div></div>
+        <div><label for="k-ret">Rendite vor Kosten</label><div class="inp"><input id="k-ret" data-kind="pct" inputmode="decimal" value="7"><span>% p. a.</span></div><div class="hint">was der Markt bringt, fest angenommen</div></div>
+      </div>
+
+      <div class="prods">
+        <div class="prod">
+          <div class="prod-h"><i style="background:var(--acc)"></i><div class="inp"><input id="k-a-name" data-kind="text" value="ETF" aria-label="Name von Produkt A"></div></div>
+          <div class="grid">
+            <div><label for="k-a-ter">Laufende Kosten</label><div class="inp"><input id="k-a-ter" data-kind="pct" inputmode="decimal" value="0,2"><span>% p. a.</span></div></div>
+            <div><label for="k-a-kp">Kaufkosten</label><div class="inp"><input id="k-a-kp" data-kind="pct" inputmode="decimal" value="0"><span>%</span></div></div>
+            <div><label for="k-a-ke">Gebühr je Kauf</label><div class="inp"><input id="k-a-ke" data-kind="eur" inputmode="decimal" value="0"><span>€</span></div></div>
+            <div><label for="k-a-dg">Depotgebühr</label><div class="inp"><input id="k-a-dg" data-kind="eur" inputmode="decimal" value="0"><span>€/Jahr</span></div></div>
+            <div><label for="k-a-tf">Fondsart</label><select id="k-a-tf"><option value="0.3">Aktienfonds (30 % steuerfrei)</option><option value="0.15">Mischfonds (15 % steuerfrei)</option><option value="0">sonstiger Fonds</option></select></div>
+          </div>
+        </div>
+        <div class="prod">
+          <div class="prod-h"><i style="background:var(--orange)"></i><div class="inp"><input id="k-b-name" data-kind="text" value="Aktiver Fonds" aria-label="Name von Produkt B"></div></div>
+          <div class="grid">
+            <div><label for="k-b-ter">Laufende Kosten</label><div class="inp"><input id="k-b-ter" data-kind="pct" inputmode="decimal" value="1,5"><span>% p. a.</span></div></div>
+            <div><label for="k-b-kp">Kaufkosten</label><div class="inp"><input id="k-b-kp" data-kind="pct" inputmode="decimal" value="5"><span>%</span></div><div class="hint">z. B. Ausgabeaufschlag</div></div>
+            <div><label for="k-b-ke">Gebühr je Kauf</label><div class="inp"><input id="k-b-ke" data-kind="eur" inputmode="decimal" value="0"><span>€</span></div></div>
+            <div><label for="k-b-dg">Depotgebühr</label><div class="inp"><input id="k-b-dg" data-kind="eur" inputmode="decimal" value="0"><span>€/Jahr</span></div></div>
+            <div><label for="k-b-tf">Fondsart</label><select id="k-b-tf"><option value="0.3">Aktienfonds (30 % steuerfrei)</option><option value="0.15">Mischfonds (15 % steuerfrei)</option><option value="0">sonstiger Fonds</option></select></div>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="sub">Steuern</h3>
+      <div class="grid">
+        <div><label for="k-fb">Sparerpauschbetrag</label><div class="inp"><input id="k-fb" data-kind="eur" inputmode="decimal" value="1.000"><span>€/Jahr</span></div><div class="hint">2.000 € bei Zusammenveranlagung</div></div>
+        <div><label for="k-kist">Kirchensteuer</label><select id="k-kist"><option value="0">keine</option><option value="0.08">8 % (Bayern, Baden-Württemberg)</option><option value="0.09">9 % (übrige Länder)</option></select></div>
+        <div><label for="k-bz">Basiszins</label><div class="inp"><input id="k-bz" data-kind="pct" inputmode="decimal" value="3,2"><span>%</span></div><div class="hint">für die Vorabpauschale; 2026: 3,20 % (BMF)</div></div>
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="k-run">Vergleichen</button>
+        <span class="status" id="k-status"></span>
+      </div>
+    </div>
+
+    <div id="k-results" hidden>
+      <p class="headline" id="k-head"></p>
+      <h2 class="sec">Kennzahlen</h2>
+      <div class="tiles" id="k-metrics"></div>
+      <h2 class="sec">Wohin das Geld geht</h2>
+      <div class="table-wrap" style="max-height:none">
+        <table>
+          <thead><tr><th></th><th id="k-th-a">A</th><th id="k-th-b">B</th></tr></thead>
+          <tbody id="k-split"></tbody>
+        </table>
+      </div>
+      <p class="note">Annahmen: feste Rendite, thesaurierender Fonds, Freibetrag nur für diese Anlage, Verkauf auf einmal am Ende des letzten Jahres, Gebühren und Steuern auf die Vorabpauschale gehen vom Girokonto ab. Keine Steuerberatung.</p>
+      <div class="charts">
+        <figure class="chart">
+          <figcaption>Netto, wenn du im jeweiligen Jahr verkaufst</figcaption>
+          <canvas id="c-kst" aria-label="Netto-Wert im Zeitverlauf"></canvas>
+          <div class="legend" id="k-leg1"></div>
+        </figure>
+        <figure class="chart">
+          <figcaption>Aufteilung am Ende</figcaption>
+          <canvas id="c-split" class="short" aria-label="Aufteilung des Endwerts"></canvas>
+          <div class="legend">
+            <span><i style="background:#4f7aa3"></i>eingezahlt</span>
+            <span><i style="background:var(--acc)"></i>Gewinn für dich</span>
+            <span><i style="background:var(--gold)"></i>Steuern</span>
+            <span><i style="background:var(--red)"></i>Kosten</span>
+          </div>
+        </figure>
+      </div>
+      <h2 class="sec">Jahr für Jahr</h2>
+      <div class="table-wrap">
+        <table>
+          <thead id="k-yhead"></thead>
+          <tbody id="k-ybody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
   <footer>
     Alle Berechnungen laufen in deinem Browser; Eingaben werden nur auf diesem Gerät gemerkt und nicht übertragen.
     Das Modell nimmt lognormal verteilte Renditen an und berücksichtigt keine Kosten und Steuern.
@@ -363,6 +460,7 @@
     return k === "pct" ? v / 100 : v;
   }
   function pretty(el) {
+    if (el.dataset.kind === "text") return;
     const v = num(el.id);
     if (!isFinite(v)) return;
     el.value = el.dataset.kind === "pct" ? de2.format(v * 100) : de0.format(v);
@@ -373,22 +471,24 @@
     get(k) { try { return JSON.parse(localStorage.getItem(k)) || {}; } catch (e) { return {}; } },
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
   };
-  const inputs = [...document.querySelectorAll(".inp input")];
+  const inputs = [...document.querySelectorAll(".inp input, select")];
   const saved = store.get("finanztool.inputs");
+  const RUN = { mc: "mc-run", e: "e-run", k: "k-run" };
   inputs.forEach(el => {
     if (typeof saved[el.id] === "string") el.value = saved[el.id];
-    el.addEventListener("blur", () => {
+    if (el.tagName === "SELECT" && el.selectedIndex < 0) el.selectedIndex = 0;
+    el.addEventListener(el.tagName === "SELECT" ? "change" : "blur", () => {
       pretty(el);
       const all = store.get("finanztool.inputs"); all[el.id] = el.value; store.set("finanztool.inputs", all);
     });
     el.addEventListener("keydown", e => {
-      if (e.key === "Enter") { pretty(el); $(el.id.startsWith("mc-") ? "mc-run" : "e-run").click(); }
+      if (e.key === "Enter") { pretty(el); $(RUN[el.id.split("-")[0]]).click(); }
     });
   });
   function remember(mode, text) { const l = store.get("finanztool.last"); l[mode] = text; store.set("finanztool.last", l); }
 
   // ---------- Menü ----------
-  const MODES = { mc: "Monte-Carlo Simulation", ent: "Entnahmeplan" };
+  const MODES = { mc: "Monte-Carlo Simulation", ent: "Entnahmeplan", kst: "Kosten & Steuern" };
   const SVG_MC = `<svg viewBox="0 0 200 120" aria-hidden="true">
     <path d="M18 98 C60 86 110 60 184 18 L184 58 C120 78 70 92 18 98Z" fill="rgba(90,169,255,.22)"/>
     <path d="M18 98 C62 88 110 70 184 34 L184 50 C118 76 70 90 18 98Z" fill="rgba(61,220,151,.4)"/>
@@ -409,11 +509,22 @@
     <path d="M18 22 C80 28 130 40 184 46 L184 66 C130 62 80 46 18 22Z" fill="rgba(61,220,151,.4)"/>
     <path d="M18 22 C80 32 132 46 184 58" fill="none" stroke="#ffcc4d" stroke-width="3" stroke-linecap="round"/>
   </svg>`;
+  const SVG_KST = `<svg viewBox="0 0 200 120" aria-hidden="true">
+    <rect x="24" y="30" width="152" height="22" rx="5" fill="#4f7aa3"/>
+    <rect x="24" y="30" width="60" height="22" rx="5" fill="#4f7aa3"/>
+    <rect x="84" y="30" width="92" height="22" fill="#3ddc97"/>
+    <rect x="24" y="68" width="60" height="22" rx="5" fill="#4f7aa3"/>
+    <rect x="84" y="68" width="44" height="22" fill="#3ddc97"/>
+    <rect x="128" y="68" width="22" height="22" fill="#ffcc4d"/>
+    <rect x="150" y="68" width="26" height="22" fill="#ff6b7a"/>
+    <path d="M150 62 L176 62" stroke="#ff6b7a" stroke-width="2" stroke-dasharray="3 3"/>
+  </svg>`;
   function renderMenu() {
     const last = store.get("finanztool.last");
     const cards = [
       { mode: "mc", svg: SVG_MC, text: "Wie viel kann aus einer Anlage werden? Tausende zufällige Börsenverläufe zeigen Spanne und Chancen." },
       { mode: "ent", svg: SVG_ENT, text: "Wie viel kannst du jedes Jahr entnehmen, und wie sicher reicht das Geld bis zum Ende?" },
+      { mode: "kst", svg: SVG_KST, text: "Was fressen Gebühren und Steuern? Zwei Produkte im Vergleich, mit Vorabpauschale und Freibetrag." },
     ];
     $("modes").innerHTML = cards.map(c => `<button class="mode" data-mode="${c.mode}">${c.svg}<div><h3>${MODES[c.mode]}</h3><p>${c.text}</p></div>${last[c.mode] ? `<span class="stat">${last[c.mode]}</span>` : ""}</button>`).join("");
   }
@@ -427,6 +538,7 @@
     $("menu").hidden = !!mode;
     $("view-mc").hidden = mode !== "mc";
     $("view-ent").hidden = mode !== "ent";
+    $("view-kst").hidden = mode !== "kst";
     $("back").hidden = !mode;
     $("mode-name").textContent = mode ? MODES[mode] : "";
     document.title = mode ? MODES[mode] + " · Finanz-Tool" : "Finanz-Tool";
@@ -856,7 +968,167 @@
     drawSurvival($("c-surv"), sim.alive, sim.n);
   }
 
-  function redrawAll() { if (mode === "mc") renderMc(); else if (mode === "ent") renderEnt(); }
+  // ---------- Kosten & Steuern ----------
+  // Monatlich gerechnet, feste Rendite, thesaurierender Fonds. Steuern nach deutschem Recht (Stand 2026):
+  // Abgeltungsteuer 25 % + Soli 5,5 % (+ Kirchensteuer), Teilfreistellung, Sparerpauschbetrag,
+  // Vorabpauschale = Wert am Jahresanfang × Basiszins × 0,7, gedeckelt auf die Wertsteigerung im Jahr,
+  // Käufe im Jahr anteilig (1/12 weniger je vollem Monat vor dem Kaufmonat).
+  function simKst(g, p, tx) {
+    const T = g.years, rm = (1 + g.ret) ** (1 / 12) - 1, cm = (1 - p.ter) ** (1 / 12);
+    let v = 0, vb = 0, paid = 0, basis = 0, kauf = 0, depot = 0, vpTax = 0;
+    const flows = new Float64Array(12 * T + 1);  // Zahlungen aus Sicht des Anlegers je Monat
+    const rows = [];
+    const saleTax = (val, bas) => Math.max(0, Math.max(0, val - bas) * (1 - p.tf) - tx.fb) * tx.rate;
+    for (let y = 1; y <= T; y++) {
+      const start = v;
+      let bought = 0, lots = 0;
+      for (let m = 1; m <= 12; m++) {
+        const gross = (y === 1 && m === 1 ? g.init : 0) + g.rate;
+        if (gross > 0) {
+          const net = Math.max(0, gross * (1 - p.kp) - p.ke);
+          kauf += gross - net; paid += gross; basis += gross;
+          v += net; vb += gross; bought += net; lots += net * (13 - m) / 12;
+          flows[(y - 1) * 12 + m - 1] -= gross;
+        }
+        v *= (1 + rm) * cm; vb *= 1 + rm;
+      }
+      depot += p.dg; flows[12 * y] -= p.dg;
+      const net = v - saleTax(v, basis) - vpTax - depot;   // Netto bei Verkauf Ende dieses Jahres
+      let vp = 0, t = 0;
+      if (y < T) {                                        // im Verkaufsjahr fällt keine Vorabpauschale an
+        vp = Math.max(0, Math.min((start + lots) * tx.bz * 0.7, v - start - bought));
+        t = Math.max(0, vp * (1 - p.tf) - tx.fb) * tx.rate;
+        basis += vp; vpTax += t; flows[12 * y] -= t;
+      }
+      rows.push({ y, v, vp, t, net, brutto: vb, paid });
+    }
+    const st = saleTax(v, basis);
+    flows[12 * T] += v - st;
+    // Rendite nach Kosten und Steuern: Zinsfuß der Zahlungen (Bisektion)
+    const npv = i => { let s = 0; for (let k = 0; k < flows.length; k++) s += flows[k] / (1 + i) ** k; return s; };
+    let lo = -0.05, hi = 0.05;
+    for (let k = 0; k < 80; k++) { const mid = (lo + hi) / 2; if (npv(mid) > 0) lo = mid; else hi = mid; }
+    const netto = v - st - vpTax - depot;
+    return {
+      rows, paid, brutto: vb, end: v, netto, kauf, depot, ter: vb - v - kauf,
+      vpTax, saleTax: st, kosten: vb - v + depot, steuern: vpTax + st,
+      irr: (1 + (lo + hi) / 2) ** 12 - 1,
+    };
+  }
+
+  let kstResult = null;
+  $("k-run").addEventListener("click", () => {
+    const g = { init: num("k-init"), rate: num("k-rate"), years: Math.round(num("k-years")), ret: num("k-ret") };
+    const prod = s => ({
+      name: $(`k-${s}-name`).value.trim() || s.toUpperCase(),
+      ter: num(`k-${s}-ter`), kp: num(`k-${s}-kp`), ke: num(`k-${s}-ke`), dg: num(`k-${s}-dg`), tf: parseFloat($(`k-${s}-tf`).value),
+    });
+    const A = prod("a"), B = prod("b");
+    const k = parseFloat($("k-kist").value);
+    const tx = { fb: num("k-fb"), bz: num("k-bz"), rate: (1 + 0.055 + k) / (4 + k) };
+    const vals = [g.init, g.rate, g.years, g.ret, tx.fb, tx.bz, A.ter, A.kp, A.ke, A.dg, B.ter, B.kp, B.ke, B.dg];
+    if (vals.some(v => !isFinite(v) || v < 0) || g.years < 1 || g.years > 80 || g.init + g.rate <= 0 || A.kp >= 1 || B.kp >= 1 || A.ter >= 1 || B.ter >= 1) {
+      $("k-status").textContent = "Bitte alle Felder mit gültigen Zahlen füllen (1 bis 80 Jahre, Anfangsbetrag oder Sparrate größer 0).";
+      return;
+    }
+    $("k-status").textContent = "";
+    kstResult = { g, A, B, tx, k, a: simKst(g, A, tx), b: simKst(g, B, tx) };
+    $("k-results").hidden = false;
+    renderKst();
+    const d = kstResult.a.netto - kstResult.b.netto;
+    remember("kst", `Zuletzt: ${Math.abs(d) < 1 ? "gleich" : (d > 0 ? A.name : B.name) + " " + eur(Math.abs(d)) + " vorne"}`);
+  });
+
+  function renderKst() {
+    if (!kstResult) return;
+    const { g, A, B, a, b } = kstResult;
+    const better = a.netto >= b.netto ? A : B, diff = Math.abs(a.netto - b.netto);
+    $("k-head").innerHTML = `Nach ${g.years} Jahren bleiben dir mit ${A.name} <b>${eur(a.netto)}</b> und mit ${B.name} <b>${eur(b.netto)}</b>. ` +
+      (diff >= 1 ? `${better.name} bringt dir ${eur(diff)} mehr.` : "Beide liefern dasselbe.");
+    const gainShare = r => { const gb = r.brutto - r.paid; return gb > 0 ? (r.kosten + r.steuern) / gb * 100 : 0; };
+    $("k-metrics").innerHTML =
+      tile(`Netto mit ${A.name}`, eur(a.netto), `nach Kosten und Steuern, bei Verkauf nach ${g.years} Jahren`, { hl: a.netto >= b.netto }) +
+      tile(`Netto mit ${B.name}`, eur(b.netto), `nach Kosten und Steuern, bei Verkauf nach ${g.years} Jahren`, { hl: b.netto > a.netto }) +
+      tile("Unterschied", eur(diff), diff >= 1 ? `zugunsten von ${better.name}` : "kein Unterschied") +
+      tile("Eingezahlt", eur(a.paid), g.rate > 0 ? `${eur(g.init)} + ${eur(g.rate)} im Monat` : "nur der Anfangsbetrag") +
+      tile(`Rendite netto (${A.name})`, pctf(a.irr * 100), `statt ${pctf(g.ret * 100)} vor Kosten und Steuern`) +
+      tile(`Rendite netto (${B.name})`, pctf(b.irr * 100), `statt ${pctf(g.ret * 100)} vor Kosten und Steuern`) +
+      tile(`Abzüge vom Gewinn (${A.name})`, pctf(gainShare(a)), "so viel vom Gewinn gehen an Kosten und Steuern", { bar: gainShare(a), color: "var(--red)" }) +
+      tile(`Abzüge vom Gewinn (${B.name})`, pctf(gainShare(b)), "so viel vom Gewinn gehen an Kosten und Steuern", { bar: gainShare(b), color: "var(--red)" });
+    $("k-th-a").textContent = A.name; $("k-th-b").textContent = B.name;
+    const row = (label, x, y, cls = "") => `<tr${cls ? ` class="${cls}"` : ""}><td${cls === "sub" ? ' class="minus"' : ""}>${label}</td><td${cls === "sub" ? ' class="minus"' : ""}>${x}</td><td${cls === "sub" ? ' class="minus"' : ""}>${y}</td></tr>`;
+    const m = x => "− " + eur(x);
+    $("k-split").innerHTML =
+      row("Eingezahlt", eur(a.paid), eur(b.paid)) +
+      row("Endwert ohne Kosten und Steuern", eur(a.brutto), eur(b.brutto)) +
+      row("Kosten", m(a.kosten), m(b.kosten)) +
+      row("davon Kaufkosten", eur(a.kauf), eur(b.kauf), "sub") +
+      row("davon laufende Kosten und entgangener Zinseszins", eur(a.ter), eur(b.ter), "sub") +
+      row("davon Depotgebühren", eur(a.depot), eur(b.depot), "sub") +
+      row("Steuern", m(a.steuern), m(b.steuern)) +
+      row("davon auf die Vorabpauschale (jährlich)", eur(a.vpTax), eur(b.vpTax), "sub") +
+      row("davon beim Verkauf", eur(a.saleTax), eur(b.saleTax), "sub") +
+      row("Netto für dich", eur(a.netto), eur(b.netto), "sum");
+    $("k-leg1").innerHTML =
+      `<span><i class="ln" style="background:var(--acc)"></i>${A.name}</span><span><i class="ln" style="background:var(--orange)"></i>${B.name}</span>` +
+      `<span><i class="dash" style="color:#8b98a8"></i>ohne Kosten und Steuern</span><span><i class="dash" style="color:#4f7aa3"></i>eingezahlt</span>`;
+    $("k-yhead").innerHTML = `<tr><th>Jahr</th><th>Wert ${A.name}</th><th>Steuer Vorabp. ${A.name}</th><th>Wert ${B.name}</th><th>Steuer Vorabp. ${B.name}</th></tr>`;
+    $("k-ybody").innerHTML = a.rows.map((r, i) => `<tr><td>${r.y}</td><td>${eur(r.v)}</td><td>${eur(r.t)}</td><td>${eur(b.rows[i].v)}</td><td>${eur(b.rows[i].t)}</td></tr>`).join("");
+    drawKstLines();
+    drawSplit();
+  }
+
+  function drawKstLines() {
+    const { a, b } = kstResult;
+    const cv = $("c-kst"), { ctx, w, h } = setupCanvas(cv), box = makeBox(w, h);
+    const T = a.rows.length;
+    const pts = key => [0, ...a.rows.map((_, i) => i + 1)];
+    const ser = [
+      { v: [kstResult.g.init, ...a.rows.map(r => r.brutto)], c: "#8b98a8", dash: [6, 5], lw: 2 },
+      { v: [kstResult.g.init, ...a.rows.map(r => r.paid)], c: "#4f7aa3", dash: [3, 4], lw: 2 },
+      { v: [kstResult.g.init, ...b.rows.map(r => r.net)], c: "#ff9f43", lw: 2.8 },
+      { v: [kstResult.g.init, ...a.rows.map(r => r.net)], c: "#3ddc97", lw: 2.8 },
+    ];
+    const hi = Math.max(...ser[0].v) * 1.05 || 1;
+    const X = t => box.x + t / T * box.w, Y = v => box.y + box.h - Math.max(0, v) / hi * box.h;
+    axes(ctx, box, niceTicks(0, hi, 5), Y, short, niceTicks(0, T, w < 460 ? 4 : 6), X, t => de0.format(t), "Jahre");
+    ctx.save(); ctx.beginPath(); ctx.rect(box.x, box.y, box.w, box.h); ctx.clip();
+    const xs = pts();
+    for (const s of ser) {
+      ctx.strokeStyle = s.c; ctx.lineWidth = s.lw; ctx.setLineDash(s.dash || []); ctx.beginPath();
+      xs.forEach((t, j) => j ? ctx.lineTo(X(t), Y(s.v[j])) : ctx.moveTo(X(t), Y(s.v[j]))); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawSplit() {
+    const { A, B, a, b } = kstResult;
+    const cv = $("c-split"), { ctx, w, h } = setupCanvas(cv);
+    const L = 14, R = 14, barH = Math.min(46, (h - 70) / 2), total = Math.max(a.brutto, b.brutto) || 1;
+    const bw = w - L - R;
+    [[A, a], [B, b]].forEach(([P, r], i) => {
+      const y0 = 26 + i * (barH + 42);
+      ctx.fillStyle = "#eef3f7"; ctx.font = "600 14px Figtree, system-ui, sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "bottom";
+      ctx.fillText(P.name, L, y0 - 6);
+      const parts = [
+        [r.paid, "#4f7aa3"], [Math.max(0, r.netto - r.paid), "#3ddc97"], [r.steuern, "#ffcc4d"], [r.kosten, "#ff6b7a"],
+      ];
+      let x = L;
+      for (const [v, c] of parts) {
+        const pw = v / total * bw;
+        ctx.fillStyle = c; ctx.fillRect(x, y0, Math.max(0, pw - 1), barH);
+        if (pw > 64) { ctx.fillStyle = "#0b1a13"; ctx.font = "600 12px Figtree, system-ui, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(short(v), x + pw / 2, y0 + barH / 2); }
+        x += pw;
+      }
+      if (r.netto < r.paid) {   // Verlust: Netto unter dem Eingezahlten markieren
+        ctx.fillStyle = "rgba(15,20,25,.6)"; ctx.fillRect(L + r.netto / total * bw, y0, (r.paid - r.netto) / total * bw, barH);
+      }
+    });
+    ctx.fillStyle = TICK; ctx.font = FONT; ctx.textAlign = "right"; ctx.textBaseline = "top";
+    ctx.fillText("ganze Länge = Endwert ohne Kosten und Steuern", w - R, h - 18);
+  }
+
+  function redrawAll() { if (mode === "mc") renderMc(); else if (mode === "ent") renderEnt(); else if (mode === "kst") renderKst(); }
   let rt = 0;
   window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(redrawAll, 120); });
 
