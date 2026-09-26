@@ -195,7 +195,7 @@
         <div><label for="mc-years">Anlagehorizont</label><div class="inp"><input id="mc-years" data-kind="int" inputmode="numeric" value="25"><span>Jahre</span></div></div>
         <div><label for="mc-cagr">Erwartete Rendite</label><div class="inp"><input id="mc-cagr" data-kind="pct" inputmode="decimal" value="8"><span>% p. a.</span></div><div class="hint">jährliche Rendite im Median (CAGR)</div></div>
         <div><label for="mc-vol">Volatilität</label><div class="inp"><input id="mc-vol" data-kind="pct" inputmode="decimal" value="15"><span>% p. a.</span></div><div class="hint">wie stark der Wert pro Jahr schwankt</div></div>
-        <div><label for="mc-infl">Inflation</label><div class="inp"><input id="mc-infl" data-kind="pct" inputmode="decimal" value="2"><span>% p. a.</span></div><div class="hint">für die Umrechnung in heutiges Geld</div></div>
+        <div><label for="mc-infl">Inflation</label><div class="inp"><input id="mc-infl" data-kind="pct" inputmode="decimal" value="2"><span>% p. a.</span></div><div class="hint">für die inflationsbereinigte Ansicht</div></div>
       </div>
       <details class="more">
         <summary>Erweitert</summary>
@@ -214,8 +214,8 @@
 
     <div id="mc-results" hidden>
       <div class="chips" id="mc-real" role="radiogroup" aria-label="Beträge anzeigen" style="margin-top:24px">
-        <button type="button" class="chip" data-real="1" role="radio">In heutigem Geld</button>
         <button type="button" class="chip" data-real="0" role="radio">Nominal</button>
+        <button type="button" class="chip" data-real="1" role="radio">Inflationsbereinigt</button>
       </div>
       <p class="headline" id="mc-head"></p>
       <div class="tiles" id="mc-top"></div>
@@ -605,7 +605,7 @@
   const INFO = {
     "mc-init": "Der Betrag, den du am Anfang auf einmal anlegst.",
     "mc-years": "Wie viele Jahre das Geld angelegt bleibt, bevor du nachsiehst, was daraus geworden ist.",
-    "mc-cagr": RENDITE, "mc-vol": VOL, "mc-infl": INFL + " Hier dient sie nur dazu, das Ergebnis in heutiges Geld umzurechnen.",
+    "mc-cagr": RENDITE, "mc-vol": VOL, "mc-infl": INFL + " Hier dient sie nur für die inflationsbereinigte Ansicht: Die Beträge zeigen dann, was das Geld in heutigen Preisen wert ist.",
     "mc-n": SIMS, "mc-seed": SEED,
     "mc-steps": "Wie oft pro Jahr ein neuer Kurs gewürfelt wird. 12 = jeden Monat. Mehr Schritte ändern am Ergebnis kaum etwas, machen die Rechnung aber langsamer.",
     "e-start": "Das Vermögen, von dem du ab jetzt lebst oder regelmäßig etwas entnimmst.",
@@ -764,7 +764,7 @@
           ["Wofür", "Du legst Geld an, einmalig und/oder monatlich, und willst wissen, was nach einigen Jahren daraus werden kann."],
           ["So geht's", "Anfangsbetrag, Sparrate, Jahre, erwartete Rendite und Volatilität eintragen, dann „Simulation starten“. Das kleine „i“ an jedem Feld erklärt, was hineingehört."],
           ["Was du bekommst", "Oben der Median und die wichtigsten Wahrscheinlichkeiten (Verlust, Verdopplung). Darunter der Fächer möglicher Verläufe und die Verteilung der Endwerte, ganz unten „Weitere Kennzahlen“."],
-          ["Gut zu wissen", "Der Schalter „In heutigem Geld“ rechnet die Inflation heraus. Die Seite sagt nichts voraus, sie zeigt, wie breit die Möglichkeiten sind."],
+          ["Gut zu wissen", "Der Schalter „Inflationsbereinigt“ rechnet die Inflation heraus: Die Beträge zeigen dann, was das Geld in heutigen Preisen wert ist. Die Seite sagt nichts voraus, sie zeigt, wie breit die Möglichkeiten sind."],
         ] },
       { mode: "ent", svg: SVG_ENT, text: "Wie viel kannst du jedes Jahr entnehmen, und wie sicher reicht das Geld bis zum Ende?",
         how: [
@@ -1078,12 +1078,13 @@
     };
   }
 
-  // Beträge nominal oder in heutigem Geld (um die Inflation abgezinst)
-  let mcReal = store.get("finanztool.inputs")["mc-real"] !== "0";
+  // Beträge nominal (Standard) oder inflationsbereinigt (um die Inflation abgezinst).
+  // Neuer Speicherschlüssel, weil "mc-real" früher bei allen auf "1" gespeichert wurde
+  let mcReal = store.get("finanztool.inputs")["mc-inflb"] === "1";
   function setMcReal(v) {
     mcReal = v;
     document.querySelectorAll("#mc-real .chip").forEach(b => b.setAttribute("aria-checked", (b.dataset.real === "1") === v));
-    const all = store.get("finanztool.inputs"); all["mc-real"] = v ? "1" : "0"; store.set("finanztool.inputs", all);
+    const all = store.get("finanztool.inputs"); delete all["mc-real"]; all["mc-inflb"] = v ? "1" : "0"; store.set("finanztool.inputs", all);
   }
   $("mc-real").addEventListener("click", e => {
     const b = e.target.closest("[data-real]");
@@ -1105,15 +1106,15 @@
     const samples = mcReal ? raw.samplePaths.map(s => s.map((v, j) => v * defl(raw.times[j]))) : raw.samplePaths;
     const inflTxt = de2.format(infl * 100) + " %";
     $("mc-head").innerHTML = mcReal
-      ? `Nach ${p.years} Jahren liegt das Depot im Median bei <b>${eur(pct[50])}</b> in heutigem Geld (nominal ${eur(raw.pct[50])}, bei ${inflTxt} Inflation). ` +
+      ? `Nach ${p.years} Jahren liegt das Depot im Median bei <b>${eur(pct[50])}</b> inflationsbereinigt (nominal ${eur(raw.pct[50])}, bei ${inflTxt} Inflation). ` +
         `Eingezahlt sind ${eur(raw.invested)}. 9 von 10 Verläufen enden zwischen ${eur(pct[5])} und ${eur(pct[95])}.`
       : `Nach ${p.years} Jahren liegt das Depot im Median bei <b>${eur(pct[50])}</b>, eingezahlt sind ${eur(raw.invested)}. ` +
         `9 von 10 Verläufen enden zwischen ${eur(pct[5])} und ${eur(pct[95])}.` +
-        (infl > 0 ? ` In heutigem Geld sind das im Median nur etwa ${eur(raw.pct[50] * toToday)}.` : "");
+        (infl > 0 ? ` Inflationsbereinigt sind das im Median nur etwa ${eur(raw.pct[50] * toToday)}.` : "");
     const red = "var(--red)";
     // Oben nur das Wichtigste, der Rest steht unter den Grafiken
     $("mc-top").innerHTML =
-      tile(mcReal ? "Median in heutigem Geld" : "Median", eur(pct[50]), mcReal ? `nominal ${eur(raw.pct[50])}` : "die Hälfte der Verläufe endet darüber", { hl: true }) +
+      tile(mcReal ? "Median inflationsbereinigt" : "Median", eur(pct[50]), mcReal ? `nominal ${eur(raw.pct[50])}` : "die Hälfte der Verläufe endet darüber", { hl: true }) +
       tile("Verlust", pctf(probs.loss), "am Ende weniger als eingezahlt" + (mcReal ? " (nominal)" : ""), { bar: probs.loss, color: red }) +
       tile("Verdopplung", pctf(probs.dbl), "am Ende mindestens das Doppelte des Eingezahlten" + (mcReal ? " (nominal)" : ""), { bar: probs.dbl }) +
       tile("Verzehnfachung", pctf(probs.ten), "am Ende mindestens das Zehnfache" + (mcReal ? " (nominal)" : ""), { bar: probs.ten }) +
@@ -1126,7 +1127,7 @@
       tile("P95", eur(pct[95]), "nur 1 von 20 Verläufen endet darüber") +
       tile("Einbruch ab 30 %", pctf(probs.dd30), "irgendwann 30 % unter dem Höchststand", { bar: probs.dd30, color: red }) +
       tile("Einbruch ab 50 %", pctf(probs.dd50), "irgendwann halbiert gegenüber dem Höchststand", { bar: probs.dd50, color: red });
-    const unit = mcReal ? ", in heutigem Geld" : ", nominal";
+    const unit = mcReal ? ", inflationsbereinigt" : ", nominal";
     $("mc-cap1").textContent = "Wertentwicklung (logarithmisch" + unit + ")";
     $("mc-cap2").textContent = "Verteilung der Endwerte (" + unit.slice(2) + ")";
     drawFan($("c-paths"), { times: r.times, bands: scaleBands, samples, log: true });
