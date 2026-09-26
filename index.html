@@ -47,11 +47,11 @@
 
   /* Menü */
   .modes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-  @media (max-width: 720px) { .modes { grid-template-columns: 1fr; } .mode { grid-template-columns: 130px 1fr; align-items: center; } .mode svg { height: 110px; } .mode .stat { grid-column: 1 / -1; } }
+  @media (max-width: 720px) { .modes { grid-template-columns: minmax(0, 1fr); } .mode { grid-template-columns: 130px minmax(0, 1fr); align-items: center; } .mode svg { height: 110px; } .mode .stat { grid-column: 1 / -1; } .mode .paren { white-space: normal; } }
   .mode { text-align: left; font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 16px; cursor: pointer; display: grid; gap: 12px; transition: transform .15s, border-color .15s; }
   .mode:hover { transform: translateY(-3px); border-color: var(--acc); }
   .mode svg { width: 100%; height: 150px; display: block; border-radius: 12px; background: radial-gradient(circle at 50% 40%, #213040 0%, #121a22 75%); }
-  .mode h3 { margin: 0; font-size: 1.25rem; }
+  .mode h3 { margin: 0; font-size: 1.25rem; overflow-wrap: break-word; }
   .paren { font-size: .82em; font-weight: 600; color: inherit; white-space: nowrap; }
   .mode p { margin: 3px 0 0; color: var(--muted); font-size: .95rem; }
   /* Karten in Zeile 1, Erklärungen in Zeile 2: eine aufgeklappte Erklärung zieht die anderen Karten nicht mit */
@@ -726,7 +726,7 @@
   // ---------- Menü ----------
   const MODES = { mc: "Vermögensentwicklung (Monte-Carlo Simulation)", ent: "Entnahmeplan", kst: "Steuern & Kosten" };
   // Klammerzusatz kleiner setzen: „Name (Zusatz)“
-  const modeHtml = s => s.replace(/ \((.+)\)$/, ' <small class="paren">($1)</small>').replace("&", "&amp;");
+  const modeHtml = s => s.replace(/ \((.+)\)$/, ' <small class="paren">($1)</small>').replace("&", "&amp;").replace("Vermögensentwicklung", "Vermögens&shy;entwicklung");
   const SVG_MC = `<svg viewBox="0 0 200 120" aria-hidden="true">
     <path d="M18 98 C60 86 110 60 184 18 L184 58 C120 78 70 92 18 98Z" fill="rgba(90,169,255,.22)"/>
     <path d="M18 98 C62 88 110 70 184 34 L184 50 C118 76 70 90 18 98Z" fill="rgba(61,220,151,.4)"/>
