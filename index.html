@@ -1114,16 +1114,16 @@
     // Oben nur das Wichtigste, der Rest steht unter den Grafiken
     $("mc-top").innerHTML =
       tile(mcReal ? "Median in heutigem Geld" : "Median", eur(pct[50]), mcReal ? `nominal ${eur(raw.pct[50])}` : "die Hälfte der Verläufe endet darüber", { hl: true }) +
-      tile("Eingezahlt", eur(r.invested), p.rate > 0 ? `${eur(p.init)} + ${eur(p.rate)} im Monat` : "nur die Anfangsinvestition") +
       tile("Verlust", pctf(probs.loss), "am Ende weniger als eingezahlt" + (mcReal ? " (nominal)" : ""), { bar: probs.loss, color: red }) +
-      tile("Verdopplung", pctf(probs.dbl), "am Ende mindestens das Doppelte des Eingezahlten" + (mcReal ? " (nominal)" : ""), { bar: probs.dbl });
+      tile("Verdopplung", pctf(probs.dbl), "am Ende mindestens das Doppelte des Eingezahlten" + (mcReal ? " (nominal)" : ""), { bar: probs.dbl }) +
+      tile("Verzehnfachung", pctf(probs.ten), "am Ende mindestens das Zehnfache" + (mcReal ? " (nominal)" : ""), { bar: probs.ten }) +
+      tile("Größter Einbruch", "−" + de0.format(r.ddMed * 100) + " %", "im Median, gemessen vom bisherigen Höchststand");
     $("mc-more").innerHTML =
+      (p.rate > 0 ? tile("Eingezahlt", eur(r.invested), `${eur(p.init)} + ${eur(p.rate)} im Monat`) : "") +
       tile("P5", eur(pct[5]), "nur 1 von 20 Verläufen endet darunter") +
       tile("P25", eur(pct[25]), "1 von 4 Verläufen endet darunter") +
       tile("P75", eur(pct[75]), "1 von 4 Verläufen endet darüber") +
       tile("P95", eur(pct[95]), "nur 1 von 20 Verläufen endet darüber") +
-      tile("Verzehnfachung", pctf(probs.ten), "am Ende mindestens das Zehnfache", { bar: probs.ten }) +
-      tile("Größter Einbruch", "−" + de0.format(r.ddMed * 100) + " %", "im Median, gemessen vom bisherigen Höchststand") +
       tile("Einbruch ab 30 %", pctf(probs.dd30), "irgendwann 30 % unter dem Höchststand", { bar: probs.dd30, color: red }) +
       tile("Einbruch ab 50 %", pctf(probs.dd50), "irgendwann halbiert gegenüber dem Höchststand", { bar: probs.dd50, color: red });
     const unit = mcReal ? ", in heutigem Geld" : ", nominal";
@@ -1359,7 +1359,8 @@
         ? tile("Netto im Monat, 1. Jahr", eur(det[0].net / 12), `brutto ${eur(det[0].sold / 12)}, Steuer ${eur(det[0].tax / 12)}`)
         : tile("Entnahme im Monat, 1. Jahr", eur(plan.E0 / 12), `${eur(plan.E0)} im Jahr`)) +
       tile("Endkapital im Median", eur(sim.endMed), "bei schwankender Rendite") +
-      tile("Geld geht vorher aus", pctf(sim.ruinP), sim.ruinMed ? `wenn ja, im Median in Jahr ${de0.format(sim.ruinMed)}` : "in keinem Verlauf", { bar: sim.ruinP, color: red });
+      tile("Geld geht vorher aus", pctf(sim.ruinP), sim.ruinMed ? `wenn ja, im Median in Jahr ${de0.format(sim.ruinMed)}` : "in keinem Verlauf", { bar: sim.ruinP, color: red }) +
+      (q.tax ? tile("Steuerquote", pctf(detGross > 0 ? detTax / detGross * 100 : 0), "so viel von allen Entnahmen geht an Steuern", { bar: detGross > 0 ? detTax / detGross * 100 : 0, color: "var(--gold)" }) : "");
     let more = "";
     if (q.ziel > 0) {
       const miss = Math.max(0, 100 - sim.success - sim.ruinP);
@@ -1375,8 +1376,7 @@
     if (q.tax) more +=
       tile(`Netto im Monat, ${T}. Jahr`, det[T - 1].net > 0 ? eur(det[T - 1].net / 12) : "–",
         det[T - 1].net > 0 ? `brutto ${eur(det[T - 1].sold / 12)}, Steuer ${eur(det[T - 1].tax / 12)}` : "Geld bei fester Rendite schon aufgebraucht") +
-      tile("Steuern insgesamt", eur(detTax), `bei fester Rendite; im Median der Simulation ${eur(sim.taxMed)}`) +
-      tile("Steuerquote", pctf(detGross > 0 ? detTax / detGross * 100 : 0), "so viel von allen Entnahmen geht an Steuern", { bar: detGross > 0 ? detTax / detGross * 100 : 0, color: "var(--gold)" });
+      tile("Steuern insgesamt", eur(detTax), `bei fester Rendite; im Median der Simulation ${eur(sim.taxMed)}`);
     $("e-more").innerHTML = more;
     const levels = [50, 75, 90, 95, 99];
     const rows = levels.map(l => ({ l, y: sim.safe(l) }));
