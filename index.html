@@ -138,7 +138,15 @@
   @media (max-width: 860px) { .charts { grid-template-columns: 1fr; } }
   .chart { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 14px; margin: 0; min-width: 0; }
   .chart figcaption { font-weight: 700; font-size: 1.05rem; margin-bottom: 6px; }
-  .chart canvas { width: 100%; height: 340px; display: block; }
+  .chart canvas { width: 100%; height: 340px; display: block; touch-action: pan-y; cursor: crosshair; }
+  .chart { position: relative; }
+  .tipline { position: absolute; width: 1px; background: rgba(238,243,247,.5); pointer-events: none; }
+  .tipdots i { position: absolute; width: 10px; height: 10px; border-radius: 50%; border: 2px solid #0f1419; transform: translate(-50%, -50%); pointer-events: none; }
+  .tipbox { position: absolute; z-index: 2; pointer-events: none; background: rgba(15,20,25,.95); border: 1px solid var(--line); border-radius: 10px; padding: 8px 11px; font-size: .84rem; line-height: 1.5; white-space: nowrap; box-shadow: 0 6px 18px rgba(0,0,0,.45); }
+  .tipbox b { display: block; margin-bottom: 2px; }
+  .tipbox strong { font-variant-numeric: tabular-nums; }
+  .tipbox i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .tiphint { font-size: .8rem; color: var(--muted); margin-top: 6px; opacity: .8; }
   @media (max-width: 520px) { .chart canvas { height: 280px; } }
   .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .88rem; color: var(--muted); margin-top: 10px; }
   .legend i { display: inline-block; width: 16px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
@@ -660,6 +668,7 @@
       if (e.key === "Enter") {
         pretty(el);
         const all = store.get("finanztool.inputs"); all[el.id] = el.value; store.set("finanztool.inputs", all);
+        enterRun = true;
         $(RUN[el.id.split("-")[0]]).click();
       }
     });
@@ -701,6 +710,15 @@
     let n = 0, p = 0;
     while (p < out.length && n < before) { if (keep(out[p])) n++; p++; }
     el.setSelectionRange(p, p);
+  }
+  // Nach eigenem Klick auf „Berechnen“ (oder Enter) zur ersten Ergebniszeile scrollen, aber nur wenn sie
+  // nicht schon zu sehen ist, und nie weiter als bis zu dieser Zeile. Automatisches Neurechnen scrollt nie.
+  let enterRun = false;
+  const userRun = e => { const u = (e && e.isTrusted) || enterRun; enterRun = false; return u; };
+  function scrollToResult(el) {
+    const r = el.getBoundingClientRect();
+    if (r.top >= 0 && r.bottom <= innerHeight) return;
+    window.scrollTo({ top: scrollY + r.top - 16, behavior: "smooth" });
   }
   function hasResult(p) { return p === "mc" ? !!mcResult : p === "e" ? !!entResult : p === "k" ? !!kstResult : false; }
   function remember(mode, text) { const l = store.get("finanztool.last"); l[mode] = text; store.set("finanztool.last", l); }
@@ -793,6 +811,7 @@
   function setupCanvas(cv) {
     const dpr = window.devicePixelRatio || 1;
     const w = cv.clientWidth, h = cv.clientHeight;
+    if (cv._hideTip) cv._hideTip();                  // alte Anzeige passt nicht mehr zur neuen Grafik
     cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
     const ctx = cv.getContext("2d");
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -800,7 +819,7 @@
     ctx.font = FONT;
     return { ctx, w, h };
   }
-  function makeBox(w, h) { const L = w < 460 ? 66 : 80; return { x: L, y: 10, w: w - L - 14, h: h - 52 }; }
+  function makeBox(w, h) { const L = w < 460 ? 76 : 80; return { x: L, y: 10, w: w - L - 14, h: h - 52 }; }
   function niceTicks(min, max, count = 5) {
     const span = max - min || 1;
     const step0 = span / count, mag = 10 ** Math.floor(Math.log10(step0));
@@ -872,6 +891,16 @@
     if (o.plan) { ctx.strokeStyle = "#ff9f43"; ctx.lineWidth = 2; ctx.setLineDash([7, 5]); line(o.plan); ctx.stroke(); ctx.setLineDash([]); }
     ctx.strokeStyle = "#ffcc4d"; ctx.lineWidth = 2.8; line(bands.p50); ctx.stroke();
     ctx.restore();
+    // Werte zum Ablesen: auf ganze Jahre einrasten
+    cv._tip = { box, pick(px) {
+      const ty = Math.round((px - box.x) / box.w * T);
+      let j = 0, d = Infinity;
+      times.forEach((t, k) => { const e = Math.abs(t - ty); if (e < d) { d = e; j = k; } });
+      const rows = [["Gut (P95)", bands.p95[j], "#5aa9ff"], ["Median", bands.p50[j], "#ffcc4d"], ["Schlecht (P5)", bands.p5[j], "#ff6b7a"]];
+      if (o.plan) rows.push(["Feste Rendite", o.plan[j], "#ff9f43"]);
+      return { x: X(times[j]), title: ty === 0 ? "Start" : `Jahr ${ty}`,
+        rows: rows.map(([l, v, c]) => ({ l, c, v: v < 0 ? "aufgebraucht" : eur(v), y: Y(v) })) };
+    } };
   }
 
   // Histogramm der Endwerte, Anteile in Prozent
@@ -903,6 +932,13 @@
     vline(pct[5], "#ff6b7a", [5, 4], 2);
     vline(pct[95], "#5aa9ff", [5, 4], 2);
     vline(pct[50], "#ffcc4d", [], 2.5);
+    cv._tip = { box, pick(px) {
+      const i = Math.max(0, Math.min(bins - 1, Math.floor((px - box.x) / box.w * bins)));
+      const a = xMin + i * bw, below = share.slice(0, i).reduce((s, v) => s + v, 0);
+      return { x: X(a + bw / 2), title: `${eur(a)} bis ${eur(a + bw)}`, rows: [
+        { l: "Anteil der Verläufe", v: pctf(share[i]), c: a + bw / 2 >= pct[25] && a + bw / 2 <= pct[75] ? "#3ddc97" : "#4f7aa3" },
+        { l: "enden darunter", v: pctf(below) }] };
+    } };
   }
 
   // Anteil der Verläufe, in denen bis Jahr t noch Geld da ist
@@ -921,6 +957,10 @@
     ctx.strokeStyle = "#3ddc97"; ctx.lineWidth = 2.8; ctx.beginPath();
     pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke();
     ctx.restore();
+    cv._tip = { box, pick(px) {
+      const t = Math.max(0, Math.min(T, Math.round((px - box.x) / box.w * T))), p = alive[t] / n * 100;
+      return { x: X(t), title: t === 0 ? "Start" : `Jahr ${t}`, rows: [{ l: "Noch Geld da", v: pctf(p), c: "#3ddc97", y: Y(p) }] };
+    } };
   }
 
   function percentileSorted(s, q) {             // wie numpy.percentile (linear)
@@ -938,7 +978,8 @@
   const workerUrl = URL.createObjectURL(new Blob([$("mc-worker").textContent], { type: "text/javascript" }));
   let workers = [], mcResult = null;
 
-  $("mc-run").addEventListener("click", () => {
+  $("mc-run").addEventListener("click", ev => {
+    const scrollAfter = userRun(ev);
     if (!check("mc", () => num("mc-init") === 0 && num("mc-rate") === 0
       ? [["mc-init", "Anfangsinvestition oder Sparrate muss größer als 0 € sein."]] : [])) return;
     const p = {
@@ -984,7 +1025,8 @@
         $("mc-status").textContent = `${de0.format(p.n)} Simulationen in ${de1.format((performance.now() - t0) / 1000)} s`;
         $("mc-results").hidden = false;
         renderMc();
-        remember("mc", `Zuletzt: Median ${eur(mcResult.pct[50])} nach ${p.years} Jahren`);
+        if (scrollAfter) scrollToResult($("mc-real"));
+        remember("mc",`Zuletzt: Median ${eur(mcResult.pct[50])} nach ${p.years} Jahren`);
       };
       w.onerror = e => {
         stopWorkers();
@@ -1246,7 +1288,8 @@
   }
 
   let entResult = null;
-  $("e-run").addEventListener("click", () => {
+  $("e-run").addEventListener("click", ev => {
+    const scrollAfter = userRun(ev);
     if (!check("e")) return;
     const q = {
       S: num("e-start"), ziel: num("e-ziel"), c: num("e-cagr"), infl: num("e-infl"),
@@ -1284,7 +1327,8 @@
     $("e-status").textContent = `${de0.format(q.n)} Simulationen in ${de1.format((performance.now() - t0) / 1000)} s`;
     $("e-results").hidden = false;
     renderEnt();
-    remember("ent", `Zuletzt: ${eur(plan.E0 / 12)} im Monat, geht in ${pctf(entResult.sim.success)} auf`);
+    if (scrollAfter) scrollToResult($("e-head"));
+    remember("ent",`Zuletzt: ${eur(plan.E0 / 12)} im Monat, geht in ${pctf(entResult.sim.success)} auf`);
   });
 
   function renderEnt() {
@@ -1445,7 +1489,8 @@
   }
 
   let kstResult = null;
-  $("k-run").addEventListener("click", () => {
+  $("k-run").addEventListener("click", ev => {
+    const scrollAfter = userRun(ev);
     if (!check("k", () => {
       if (TYPES[kType].zins) return [];
       const v = num("k-value"), cost = v * num("k-vkp") + num("k-vke");
@@ -1473,7 +1518,8 @@
     kstResult = { s, r, one: s.n > 1 ? calcTax(s, 1) : null, two: s.n === 1 && spread ? calcTax(s, 2) : null, spread };
     $("k-results").hidden = false;
     renderKst();
-    remember("kst", `Zuletzt: ${T.name}, netto ${eur(r.netto)}`);
+    if (scrollAfter) scrollToResult($("k-head"));
+    remember("kst",`Zuletzt: ${T.name}, netto ${eur(r.netto)}`);
   });
 
   function renderKst() {
@@ -1578,7 +1624,7 @@
   function drawSpread() {
     const { s, spread } = kstResult;
     const cv = $("c-spread"), { ctx, w, h } = setupCanvas(cv);
-    const box = { x: w < 460 ? 66 : 80, y: 12, w: 0, h: h - 52 }; box.w = w - box.x - 14;
+    const box = { x: w < 460 ? 76 : 80, y: 12, w: 0, h: h - 52 }; box.w = w - box.x - 14;
     const hi = Math.max(...spread) * 1.1 || 1;
     const Y = v => box.y + box.h - v / hi * box.h;
     const slot = box.w / spread.length;
@@ -1590,7 +1636,46 @@
       ctx.fillStyle = TICK; ctx.font = FONT; ctx.textAlign = "center"; ctx.textBaseline = "top";
       ctx.fillText(String(i + 1), x + bw / 2, box.y + box.h + 7);
     });
+    cv._tip = { box, pick(px) {
+      const i = Math.max(0, Math.min(spread.length - 1, Math.floor((px - box.x) / slot)));
+      return { x: box.x + (i + 0.5) * slot, title: `Verteilt auf ${i + 1} Jahr${i ? "e" : ""}`,
+        rows: [{ l: "Steuer", v: eur(spread[i]), c: i + 1 === s.n ? "#ffcc4d" : "#4f7aa3" }] };
+    } };
   }
+
+  // ---------- Werte in den Grafiken ablesen (Maus oder Finger) ----------
+  function attachTip(cv) {
+    const fig = cv.closest("figure");
+    const mk = cls => { const d = document.createElement("div"); d.className = cls; d.hidden = true; fig.append(d); return d; };
+    const line = mk("tipline"), box = mk("tipbox"), dots = mk("tipdots");
+    const hint = document.createElement("div"); hint.className = "tiphint";
+    hint.textContent = "Tippen oder mit der Maus zeigen, um Werte abzulesen.";
+    fig.append(hint);
+    const hide = () => { line.hidden = box.hidden = dots.hidden = true; };
+    cv._hideTip = hide;
+    function show(e) {
+      const t = cv._tip; if (!t) return;
+      const r = cv.getBoundingClientRect(), px = e.clientX - r.left;
+      if (px < t.box.x - 12 || px > t.box.x + t.box.w + 12) { hide(); return; }
+      const p = t.pick(Math.max(t.box.x, Math.min(t.box.x + t.box.w - 0.01, px)));
+      const ox = cv.offsetLeft, oy = cv.offsetTop;
+      Object.assign(line.style, { left: ox + p.x + "px", top: oy + t.box.y + "px", height: t.box.h + "px" });
+      dots.innerHTML = p.rows.filter(q => q.y !== undefined && q.c)
+        .map(q => `<i style="left:${ox + p.x}px;top:${oy + Math.max(t.box.y, Math.min(t.box.y + t.box.h, q.y))}px;background:${q.c}"></i>`).join("");
+      box.innerHTML = `<b>${p.title}</b>` + p.rows.map(q => `<div>${q.c ? `<i style="background:${q.c}"></i>` : ""}${q.l}: <strong>${q.v}</strong></div>`).join("");
+      line.hidden = box.hidden = dots.hidden = false;
+      const bw = box.offsetWidth;
+      let left = ox + p.x + 14;
+      if (left + bw > fig.clientWidth - 6) left = ox + p.x - 14 - bw;
+      box.style.left = Math.max(6, left) + "px";
+      box.style.top = oy + t.box.y + 6 + "px";
+    }
+    cv.addEventListener("pointermove", show);
+    cv.addEventListener("pointerdown", show);
+    cv.addEventListener("pointerleave", e => { if (e.pointerType === "mouse") hide(); });
+    document.addEventListener("pointerdown", e => { if (e.target !== cv) hide(); });
+  }
+  ["c-paths", "c-hist", "c-ent", "c-surv", "c-spread"].forEach(id => attachTip($(id)));
 
   function redrawAll() { if (mode === "mc") renderMc(); else if (mode === "ent") renderEnt(); else if (mode === "kst") renderKst(); }
   let rt = 0;
